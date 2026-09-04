@@ -411,7 +411,7 @@ SEVERITY_COLOR = {"High": "🔴", "Medium": "🟠"}
 
 
 def render_alerts() -> None:
-    st.subheader("🚨 Alerts")
+    st.subheader("Alerts")
     col1, col2 = st.columns([4, 1])
     with col2:
         if st.session_state["role"] in ("Admin", "Analyst") and st.button("Run Scan Now"):
@@ -615,16 +615,10 @@ def render_auto_assessment(df: pd.DataFrame, alerts: list) -> None:
 
 
 def render_dashboard() -> None:
-    title_col, user_col = st.columns([3.2, 1.2])
+    title_col, user_col = st.columns([3, 1.4])
     with title_col:
-        st.markdown(
-            f'<div style="display:flex; align-items:center; gap:14px;">'
-            f'<div class="sidebar-icon" style="margin-bottom:0;">{STRAWBERRY_ICON}</div>'
-            f'<div><span class="badge-pill">▸ Regional OSINT Platform · WESMINCOM</span>'
-            f'<h1 style="margin:0; padding:0;">Open Source Intelligence</h1></div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown('<span class="badge-pill">▸ Regional OSINT Platform · WESMINCOM</span>', unsafe_allow_html=True)
+        st.markdown('<h1 style="margin:0; padding:0;">Open Source Intelligence</h1>', unsafe_allow_html=True)
     with user_col:
         st.markdown("<div style='height:1.6em;'></div>", unsafe_allow_html=True)
         st.markdown(
