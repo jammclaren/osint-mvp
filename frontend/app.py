@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import os
-import re
 import pandas as pd
 import plotly.express as px
 
@@ -222,219 +221,98 @@ def render_login() -> None:
                         st.error(f"Connection error: {e}")
 
 
-PLATFORM_OPTIONS = ["X/Twitter", "Telegram", "Facebook", "Field Report"]
-PLATFORM_ICON = {"X/Twitter": "🐦", "Telegram": "✈️", "Facebook": "📘", "Field Report": "📋"}
+SMI_CATEGORIES = {
+    "Local Terrorist Groups": ["isis", "abu sayyaf", "daulah islamiyah", "dawlah islamiyah", "asg", "maute"],
+    "Communist Terrorist Groups": ["cpp-npa-ndf", "cpp-npa", "cpp", "npa", "ndf"],
+    "BARMM Parliamentary Elections": ["barmm", "bangsamoro parliament", "bpe", "parliamentary election", "comelec", "bangsamoro"],
+    "West Philippine Sea & Sabah": ["west philippine sea", "wps", "sabah", "south china sea"],
+}
 
 
-def render_ingestion_form() -> None:
-    with st.expander("➕ Log New OSINT Record"):
-        with st.form("new_record_form"):
-            content = st.text_area("Content")
-            col1, col2 = st.columns(2)
-            with col1:
-                jtf_assignment = st.selectbox("Joint Task Force", ["JTF ZAMPELAN", "JTF ORION", "JTF Central", "JTF Poseidon"])
-                thematic_vector = st.selectbox("Thematic Vector", ["Electoral Security", "Securitization & Threat Groups", "Territorial & Maritime Security"])
-                province = st.text_input("Province")
-                source_platform = st.selectbox("Source Platform", PLATFORM_OPTIONS)
-            with col2:
-                activity_type = st.selectbox("Activity Type", ["Non-Violent", "Violent"])
-                threat_score = st.slider("Threat Score", 0.0, 10.0, 0.0, 0.1)
-                sentiment_score = st.slider("Sentiment Score", -1.0, 1.0, 0.0, 0.1)
-            source_url = st.text_input("Source URL / Post Link (optional)")
-
-            if st.form_submit_button("Submit Record") and content and province:
-                payload = {
-                    "content": content,
-                    "jtf_assignment": jtf_assignment,
-                    "thematic_vector": thematic_vector,
-                    "province": province,
-                    "activity_type": activity_type,
-                    "threat_score": threat_score,
-                    "sentiment_score": sentiment_score,
-                    "source_platform": source_platform,
-                    "source_url": source_url or None,
-                }
-                try:
-                    resp = requests.post(f"{API_URL}/records/", json=payload, headers=auth_headers())
-                    if resp.status_code == 200:
-                        st.success("Record logged.")
-                        st.rerun()
-                    else:
-                        st.error(resp.json().get("detail", "Failed to submit record"))
-                except Exception as e:
-                    st.error(f"Connection error: {e}")
-
-
-def render_edit_delete(df: pd.DataFrame) -> None:
-    with st.expander("✏️ Edit / Delete Record"):
-        record_id = st.selectbox("Record ID", df["id"].tolist(), key="edit_record_id")
-        record = df[df["id"] == record_id].iloc[0]
-
-        with st.form("edit_record_form"):
-            content = st.text_area("Content", value=record["content"])
-            col1, col2 = st.columns(2)
-            jtf_options = ["JTF ZAMPELAN", "JTF ORION", "JTF Central", "JTF Poseidon"]
-            vector_options = ["Electoral Security", "Securitization & Threat Groups", "Territorial & Maritime Security"]
-            activity_options = ["Non-Violent", "Violent"]
-            with col1:
-                jtf_assignment = st.selectbox("Joint Task Force", jtf_options, index=jtf_options.index(record["jtf_assignment"]) if record["jtf_assignment"] in jtf_options else 0)
-                thematic_vector = st.selectbox("Thematic Vector", vector_options, index=vector_options.index(record["thematic_vector"]) if record["thematic_vector"] in vector_options else 0)
-                province = st.text_input("Province", value=record["province"])
-                current_platform = record.get("source_platform", "Field Report")
-                source_platform = st.selectbox("Source Platform", PLATFORM_OPTIONS, index=PLATFORM_OPTIONS.index(current_platform) if current_platform in PLATFORM_OPTIONS else 3)
-            with col2:
-                activity_type = st.selectbox("Activity Type", activity_options, index=activity_options.index(record["activity_type"]) if record["activity_type"] in activity_options else 0)
-                threat_score = st.slider("Threat Score", 0.0, 10.0, float(record["threat_score"]), 0.1)
-                sentiment_score = st.slider("Sentiment Score", -1.0, 1.0, float(record["sentiment_score"]), 0.1)
-
-            col_save, col_delete = st.columns(2)
-            with col_save:
-                save = st.form_submit_button("Save Changes")
-            with col_delete:
-                delete = st.form_submit_button("Delete Record", type="primary")
-
-            if save:
-                payload = {
-                    "content": content, "jtf_assignment": jtf_assignment, "thematic_vector": thematic_vector,
-                    "province": province, "activity_type": activity_type,
-                    "threat_score": threat_score, "sentiment_score": sentiment_score,
-                    "source_platform": source_platform,
-                }
-                try:
-                    resp = requests.patch(f"{API_URL}/records/{record_id}", json=payload, headers=auth_headers())
-                    if resp.status_code == 200:
-                        st.success("Record updated.")
-                        st.rerun()
-                    else:
-                        st.error(resp.json().get("detail", "Update failed"))
-                except Exception as e:
-                    st.error(f"Connection error: {e}")
-
-            if delete:
-                if st.session_state["role"] != "Admin":
-                    st.error("Only Admins can delete records.")
-                else:
-                    try:
-                        resp = requests.delete(f"{API_URL}/records/{record_id}", headers=auth_headers())
-                        if resp.status_code == 200:
-                            st.success("Record deleted.")
-                            st.rerun()
-                        else:
-                            st.error(resp.json().get("detail", "Delete failed"))
-                    except Exception as e:
-                        st.error(f"Connection error: {e}")
-
-
-def render_timeline(df: pd.DataFrame) -> None:
-    timeline = df.copy()
-    timeline["date"] = pd.to_datetime(timeline["created_at"]).dt.date
-    counts = timeline.groupby(["date", "activity_type"]).size().reset_index(name="count")
-    fig = px.bar(counts, x="date", y="count", color="activity_type", barmode="stack", title="Records by Day")
-    st.plotly_chart(fig, use_container_width=True)
+def classify_smi_category(content: str) -> str:
+    lower = str(content).lower()
+    for category, terms in SMI_CATEGORIES.items():
+        if any(term in lower for term in terms):
+            return category
+    return "Other / Uncategorized"
 
 
 def render_kpis(df: pd.DataFrame, active_sources: int) -> None:
     created = pd.to_datetime(df["created_at"])
     now = pd.Timestamp.now(tz="UTC")
     this_week = created[created >= now - pd.Timedelta(days=7)]
+    violent = df[df["activity_type"] == "Violent"]
     high_threat = df[df["threat_score"] >= 7.0]
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Monitored Incidents", len(df))
-    c2.metric("Incidents — Last 7 Days", len(this_week))
-    c3.metric("High-Threat Incidents", len(high_threat))
-    c4.metric("Active Monitored Sources", active_sources)
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Total Monitored Posts", len(df))
+    c2.metric("Violent", len(violent))
+    c3.metric("Non-Violent", len(df) - len(violent))
+    c4.metric("High-Threat", len(high_threat))
+    c5.metric("Active Sources", active_sources)
+    st.caption(f"Reflects {len(this_week)} post(s) in the last 7 days, extracted from Monitored Sources.")
+
+
+def render_category_breakdown(df: pd.DataFrame) -> pd.DataFrame:
+    cat_df = df.copy()
+    cat_df["smi_category"] = cat_df["content"].map(classify_smi_category)
+
+    counts = cat_df.groupby(["smi_category", "activity_type"]).size().reset_index(name="count")
+    fig = px.bar(
+        counts, x="smi_category", y="count", color="activity_type", barmode="group",
+        title="Monitored Posts by Category — Violent vs. Non-Violent",
+        category_orders={"smi_category": list(SMI_CATEGORIES.keys()) + ["Other / Uncategorized"]},
+    )
+    fig.update_xaxes(title=None)
+    st.plotly_chart(fig, use_container_width=True)
+
+    cols = st.columns(4)
+    for i, category in enumerate(SMI_CATEGORIES.keys()):
+        sub = cat_df[cat_df["smi_category"] == category]
+        with cols[i]:
+            st.markdown(f"**{category}**")
+            st.metric("Violent", len(sub[sub["activity_type"] == "Violent"]))
+            st.metric("Non-Violent", len(sub[sub["activity_type"] == "Non-Violent"]))
+
+    return cat_df
+
+
+def render_timeline(df: pd.DataFrame) -> None:
+    timeline = df.copy()
+    timeline["date"] = pd.to_datetime(timeline["created_at"]).dt.date
+    counts = timeline.groupby(["date", "activity_type"]).size().reset_index(name="count")
+    fig = px.bar(counts, x="date", y="count", color="activity_type", barmode="stack", title="Volume Over Time")
+    st.plotly_chart(fig, use_container_width=True)
 
 
 def render_platform_distribution(df: pd.DataFrame) -> None:
     if "source_platform" not in df.columns:
         return
-    fig = px.pie(df, names="source_platform", hole=0.5, title="Incidents by Source Platform")
+    fig = px.pie(df, names="source_platform", hole=0.5, title="Posts by Source Platform")
     st.plotly_chart(fig, use_container_width=True)
 
 
-def render_monitored_sources() -> None:
-    with st.expander("📡 Monitored Sources — Public Pages & Figures"):
-        try:
-            resp = requests.get(f"{API_URL}/sources/", headers=auth_headers())
-            sources = resp.json() if resp.status_code == 200 else []
-        except Exception:
-            sources = []
-
-        if sources:
-            st.dataframe(pd.DataFrame(sources)[["platform", "handle", "status", "notes"]], use_container_width=True)
-        else:
-            st.caption("No sources configured yet.")
-
-        with st.form("new_source_form"):
-            col1, col2, col3 = st.columns([2, 3, 2])
-            with col1:
-                platform = st.selectbox("Platform", PLATFORM_OPTIONS[:-1])
-            with col2:
-                handle = st.text_input("Page / Channel / Handle", placeholder="e.g. Cotabato News, Brigada News BARMM")
-            with col3:
-                source_status = st.selectbox("Status", ["Active", "Pending", "Paused"])
-            notes = st.text_input("Notes (optional)", placeholder="e.g. Public news page / public figure / vlogger")
-            if st.form_submit_button("Add Source") and handle:
-                try:
-                    resp = requests.post(
-                        f"{API_URL}/sources/",
-                        json={"platform": platform, "handle": handle, "status": source_status, "notes": notes or None},
-                        headers=auth_headers(),
-                    )
-                    if resp.status_code == 200:
-                        st.success(f"Added '{handle}'.")
-                        st.rerun()
-                    else:
-                        st.error(resp.json().get("detail", "Failed to add source"))
-                except Exception as e:
-                    st.error(f"Connection error: {e}")
-
-
-def render_distribution(df: pd.DataFrame) -> None:
-    fig = px.pie(df, names="thematic_vector", hole=0.5, title="Distribution by Thematic Vector")
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def render_leaderboard(df: pd.DataFrame) -> None:
-    leaderboard = (
-        df.groupby("province")["threat_score"].mean().sort_values(ascending=False).head(7).reset_index()
-    )
-    fig = px.bar(leaderboard, x="province", y="threat_score", title="Priority Leaderboard — Avg Threat Score by Province")
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def render_sentiment_trend(df: pd.DataFrame) -> None:
-    trend = df.copy()
-    trend["date"] = pd.to_datetime(trend["created_at"]).dt.date
-    daily = trend.groupby("date")["sentiment_score"].mean().reset_index()
-    fig = px.line(
-        daily, x="date", y="sentiment_score", markers=True,
-        title="Sentiment Trend — Avg. Sentiment by Day",
-    )
-    fig.add_hline(y=0, line_dash="dot", line_color="#7c8268")
-    fig.update_yaxes(range=[-1, 1])
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def render_keyword_frequency(alerts: list) -> None:
-    keyword_alerts = [a for a in alerts if a["rule_type"] == "keyword_match"]
-    if not keyword_alerts:
-        st.caption("No keyword mentions detected yet.")
+def render_geo_priority(df: pd.DataFrame) -> None:
+    geo = df.copy()
+    geo["lat"] = geo["province"].map(lambda p: PROVINCE_CENTROIDS.get(p, (None, None))[0])
+    geo["lon"] = geo["province"].map(lambda p: PROVINCE_CENTROIDS.get(p, (None, None))[1])
+    geo = geo.dropna(subset=["lat", "lon"])
+    if geo.empty:
         return
 
-    terms = []
-    for a in keyword_alerts:
-        m = re.search(r"Keyword '([^']+)'", a["message"])
-        if m:
-            terms.append(m.group(1))
+    agg = geo.groupby(["province", "lat", "lon"]).agg(
+        post_count=("id", "count"), avg_threat=("threat_score", "mean")
+    ).reset_index()
 
-    if not terms:
-        return
-
-    counts = pd.Series(terms).value_counts().reset_index()
-    counts.columns = ["keyword", "mentions"]
-    fig = px.bar(counts, x="keyword", y="mentions", title="Top Tracked Keyword Mentions")
+    fig = px.scatter_geo(
+        agg, lat="lat", lon="lon", size="post_count", color="avg_threat",
+        hover_name="province", color_continuous_scale="OrRd",
+        title="Geographic Priority — Where to Focus Response",
+    )
+    fig.update_geos(
+        lataxis_range=[4, 10], lonaxis_range=[118, 126],
+        showland=True, landcolor="rgb(30,30,30)", showcountries=True,
+    )
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -546,53 +424,68 @@ def render_trend_spikes(df: pd.DataFrame) -> None:
         st.dataframe(spikes[["date", "thematic_vector", "count"]], use_container_width=True)
 
 
-def render_geo_map(df: pd.DataFrame) -> None:
-    geo = df.copy()
-    geo["lat"] = geo["province"].map(lambda p: PROVINCE_CENTROIDS.get(p, (None, None))[0])
-    geo["lon"] = geo["province"].map(lambda p: PROVINCE_CENTROIDS.get(p, (None, None))[1])
-    geo = geo.dropna(subset=["lat", "lon"])
-
-    if geo.empty:
-        st.caption("No records with a mappable province yet.")
+def render_compact_search() -> None:
+    query = st.text_input("Search", key="smi_search", placeholder="🔎 Search monitored posts...", label_visibility="collapsed")
+    if not query:
         return
+    try:
+        resp = requests.get(f"{API_URL}/records/search", params={"q": query, "limit": 5}, headers=auth_headers())
+        if resp.status_code == 200:
+            results = resp.json()
+            if results:
+                results_df = pd.DataFrame(results)
+                results_df["similarity"] = results_df["similarity"].map(lambda s: f"{s:.2f}")
+                st.dataframe(
+                    results_df[["similarity", "province", "thematic_vector", "content", "created_at"]],
+                    use_container_width=True, height=180,
+                )
+            else:
+                st.caption("No matches.")
+        else:
+            st.error(resp.json().get("detail", "Search failed"))
+    except Exception as e:
+        st.error(f"Connection error: {e}")
 
-    agg = geo.groupby(["province", "lat", "lon"]).agg(
-        record_count=("id", "count"), avg_threat=("threat_score", "mean")
-    ).reset_index()
 
-    fig = px.scatter_geo(
-        agg, lat="lat", lon="lon", size="record_count", color="avg_threat",
-        hover_name="province", color_continuous_scale="OrRd",
-        title="Geospatial Distribution — OSINT Data Points by Province",
-    )
-    fig.update_geos(
-        lataxis_range=[4, 10], lonaxis_range=[118, 126],
-        showland=True, landcolor="rgb(30,30,30)", showcountries=True,
-    )
-    st.plotly_chart(fig, use_container_width=True)
+def render_auto_assessment(df: pd.DataFrame, alerts: list) -> None:
+    cat_df = df.copy()
+    cat_df["smi_category"] = cat_df["content"].map(classify_smi_category)
 
+    total = len(cat_df)
+    violent = len(cat_df[cat_df["activity_type"] == "Violent"])
+    high_threat = cat_df[cat_df["threat_score"] >= 7.0]
+    unacknowledged = [a for a in alerts if not a["acknowledged"]]
 
-def render_semantic_search() -> None:
-    with st.expander("🔎 Semantic Search"):
-        query = st.text_input("Search by meaning (not just keywords)", key="semantic_query")
-        if query:
-            try:
-                resp = requests.get(f"{API_URL}/records/search", params={"q": query, "limit": 10}, headers=auth_headers())
-                if resp.status_code == 200:
-                    results = resp.json()
-                    if results:
-                        results_df = pd.DataFrame(results)
-                        results_df["similarity"] = results_df["similarity"].map(lambda s: f"{s:.2f}")
-                        st.dataframe(
-                            results_df[["similarity", "jtf_assignment", "province", "thematic_vector", "content", "created_at"]],
-                            use_container_width=True,
-                        )
-                    else:
-                        st.info("No matches — records need an embedding, which is only generated for records created after this feature shipped.")
-                else:
-                    st.error(resp.json().get("detail", "Search failed"))
-            except Exception as e:
-                st.error(f"Connection error: {e}")
+    cat_counts = cat_df["smi_category"].value_counts()
+    top_category = cat_counts.index[0] if not cat_counts.empty else "N/A"
+
+    prov_threat = cat_df.groupby("province")["threat_score"].mean().sort_values(ascending=False)
+    top_province = prov_threat.index[0] if not prov_threat.empty else "N/A"
+    top_province_score = prov_threat.iloc[0] if not prov_threat.empty else 0
+
+    with st.container(border=True):
+        st.markdown("**SITUATION SUMMARY**")
+        st.markdown(
+            f"- **{total}** posts monitored, **{violent}** flagged violent ({violent / total * 100:.0f}% of total)."
+            if total else "- No posts monitored yet."
+        )
+        if total:
+            st.markdown(f"- Dominant category: **{top_category}** ({cat_counts.iloc[0]} posts).")
+            st.markdown(f"- **{len(high_threat)}** post(s) at high threat level (≥7.0).")
+            st.markdown(f"- Highest average threat concentration: **{top_province}** (avg {top_province_score:.1f}/10).")
+        st.markdown(f"- **{len(unacknowledged)}** unacknowledged alert(s) pending review.")
+
+        st.markdown("**RECOMMENDATION**")
+        if len(unacknowledged) > 0:
+            st.markdown(f"- Prioritize review of {len(unacknowledged)} open alert(s) before next scan cycle.")
+        if total and top_province != "N/A" and top_province_score >= 5.0:
+            st.markdown(f"- Consider reinforcing monitoring/response posture in **{top_province}** given elevated threat concentration.")
+        if total and cat_counts.iloc[0] > 0:
+            st.markdown(f"- Sustained volume in **{top_category}** warrants continued source coverage in that category.")
+        if not unacknowledged and (not total or top_province_score < 5.0):
+            st.markdown("- No immediate escalation indicated by current data; maintain standard monitoring cadence.")
+
+        st.caption("Auto-generated from monitored source data — rule-based summary, not a substitute for analyst judgment.")
 
 
 def render_dashboard() -> None:
@@ -607,8 +500,14 @@ def render_dashboard() -> None:
     selected_jtf = st.sidebar.selectbox("Joint Task Force", ["All", "JTF ZAMPELAN", "JTF ORION", "JTF Central", "JTF Poseidon"])
     selected_vector = st.sidebar.selectbox("Thematic Vector", ["All", "Electoral Security", "Securitization & Threat Groups", "Territorial & Maritime Security"])
 
-    st.markdown('<span class="badge-pill">▸ Regional OSINT Platform · WESMINCOM</span>', unsafe_allow_html=True)
-    st.title("🛡️ Regional Situational Awareness & OSINT Dashboard")
+    header_col, search_col = st.columns([3, 1])
+    with header_col:
+        st.markdown('<span class="badge-pill">▸ Regional OSINT Platform · WESMINCOM</span>', unsafe_allow_html=True)
+        st.title("🛡️ Regional Situational Awareness & OSINT Dashboard")
+    with search_col:
+        st.markdown("<div style='height:2.3em;'></div>", unsafe_allow_html=True)
+        render_compact_search()
+
     now_str = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M UTC")
     st.markdown(
         f'<div class="ops-banner"><span><span class="status-dot"></span><span class="live">SYSTEM ONLINE</span> · SCAN: HOURLY / ON-DEMAND</span>'
@@ -620,15 +519,6 @@ def render_dashboard() -> None:
     render_alerts()
     st.markdown("---")
 
-    if st.session_state["role"] in ("Admin", "Analyst"):
-        render_ingestion_form()
-        render_keyword_manager()
-        render_monitored_sources()
-
-    render_semantic_search()
-
-    st.subheader("Live Telemetry & Threat Feed")
-
     try:
         response = requests.get(f"{API_URL}/records/", headers=auth_headers())
         if response.status_code == 200:
@@ -637,13 +527,15 @@ def render_dashboard() -> None:
                 df_all = pd.DataFrame(records)
 
                 try:
-                    active_sources = requests.get(f"{API_URL}/sources/", headers=auth_headers()).json()
-                    active_source_count = sum(1 for s in active_sources if s["status"] == "Active")
+                    sources = requests.get(f"{API_URL}/sources/", headers=auth_headers()).json()
+                    active_source_count = sum(1 for s in sources if s["status"] == "Active")
                 except Exception:
                     active_source_count = 0
 
-                render_kpis(df_all, active_source_count)
-                st.markdown("---")
+                try:
+                    all_alerts = requests.get(f"{API_URL}/alerts/", headers=auth_headers()).json()
+                except Exception:
+                    all_alerts = []
 
                 df = df_all
                 if selected_jtf != "All":
@@ -651,50 +543,26 @@ def render_dashboard() -> None:
                 if selected_vector != "All":
                     df = df[df["thematic_vector"] == selected_vector]
 
-                display_df = df.copy()
-                if "source_platform" in display_df.columns:
-                    display_df["source_platform"] = display_df["source_platform"].map(
-                        lambda p: f"{PLATFORM_ICON.get(p, '')} {p}"
-                    )
-                    cols = ["id", "source_platform", "jtf_assignment", "province", "thematic_vector", "activity_type", "threat_score", "content", "created_at"]
-                else:
-                    cols = ["id", "jtf_assignment", "province", "thematic_vector", "activity_type", "threat_score", "content", "created_at"]
-                st.dataframe(display_df[cols], use_container_width=True)
-
-                if st.session_state["role"] in ("Admin", "Analyst"):
-                    render_edit_delete(df)
-
+                st.subheader("📊 Social Media Intelligence Overview")
+                st.caption("All entries extracted from Monitored Sources (public pages, officials, vloggers).")
+                render_kpis(df, active_source_count)
                 st.markdown("---")
-                render_timeline(df)
+                render_category_breakdown(df)
+                st.markdown("---")
 
                 col1, col2 = st.columns(2)
                 with col1:
-                    render_distribution(df)
+                    render_timeline(df)
                 with col2:
-                    render_leaderboard(df)
-
-                st.markdown("---")
-                st.subheader("📊 Social Media Intelligence Overview")
-
-                col3, col4 = st.columns(2)
-                with col3:
                     render_platform_distribution(df)
-                with col4:
-                    render_sentiment_trend(df)
 
-                try:
-                    all_alerts = requests.get(f"{API_URL}/alerts/", headers=auth_headers()).json()
-                    render_keyword_frequency(all_alerts)
-                except Exception:
-                    pass
+                render_geo_priority(df)
 
                 st.markdown("---")
-                render_trend_spikes(df)
-
-                st.markdown("---")
-                render_geo_map(df)
+                st.subheader("🧭 Auto-Generated Analysis & Assessment")
+                render_auto_assessment(df, all_alerts)
             else:
-                st.info("No OSINT records found in local database. Use the form above to log one.")
+                st.info("No monitored posts yet.")
         elif response.status_code == 401:
             for key in ("token", "username", "role"):
                 st.session_state.pop(key, None)
