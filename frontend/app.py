@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 import os
 import pandas as pd
@@ -160,6 +161,7 @@ input, textarea { background-color: #14150f !important; border-color: var(--pane
 [data-testid="stDataFrame"] { border: 1px solid var(--panel-border); border-radius: 2px; }
 .stAlert { border-radius: 2px; }
 [data-testid="stMetricValue"] { color: var(--gold) !important; text-shadow: 0 0 8px var(--amber-glow); }
+iframe { background: transparent !important; border: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -524,6 +526,50 @@ def render_compact_search() -> None:
         st.error(f"Connection error: {e}")
 
 
+def render_live_clock() -> None:
+    components.html("""
+    <div id="osint-clock" style="font-family:'Share Tech Mono',monospace;color:#7c8268;
+        font-size:0.75rem;letter-spacing:0.08em;text-align:right;background:transparent;
+        padding-top:6px;">--:--:-- UTC</div>
+    <script>
+    function tick() {
+        var el = document.getElementById('osint-clock');
+        if (!el) return;
+        var now = new Date();
+        var pad = function(n) { return String(n).padStart(2, '0'); };
+        el.textContent = now.getUTCFullYear() + '-' + pad(now.getUTCMonth()+1) + '-' + pad(now.getUTCDate())
+            + ' ' + pad(now.getUTCHours()) + ':' + pad(now.getUTCMinutes()) + ':' + pad(now.getUTCSeconds()) + ' UTC';
+    }
+    tick();
+    setInterval(tick, 1000);
+    </script>
+    """, height=28)
+
+
+def render_source_browser() -> None:
+    if "show_sources" not in st.session_state:
+        st.session_state["show_sources"] = False
+
+    if st.button("📡 Scan / Browse Sources"):
+        st.session_state["show_sources"] = not st.session_state["show_sources"]
+
+    if st.session_state["show_sources"]:
+        try:
+            resp = requests.get(f"{API_URL}/sources/", headers=auth_headers())
+            sources = resp.json() if resp.status_code == 200 else []
+        except Exception:
+            sources = []
+
+        if sources:
+            src_df = pd.DataFrame(sources)
+            src_df["platform"] = src_df["platform"].map(lambda p: f"{PLATFORM_ICON.get(p, '')} {p}")
+            st.dataframe(src_df[["platform", "handle", "status", "notes"]], use_container_width=True)
+            active = sum(1 for s in sources if s["status"] == "Active")
+            st.caption(f"{len(sources)} source(s) configured — {active} active.")
+        else:
+            st.caption("No sources configured yet.")
+
+
 def render_auto_assessment(df: pd.DataFrame, alerts: list) -> None:
     cat_df = df.copy()
     cat_df["smi_category"] = cat_df["content"].map(classify_smi_category)
@@ -566,31 +612,38 @@ def render_auto_assessment(df: pd.DataFrame, alerts: list) -> None:
 
 
 def render_dashboard() -> None:
-    st.sidebar.markdown(f'<div class="sidebar-icon">{STRAWBERRY_ICON}</div>', unsafe_allow_html=True)
-    st.sidebar.header("Operational Parameters")
-    st.sidebar.markdown(f"Signed in as **{st.session_state['username']}** ({st.session_state['role']})")
-    if st.sidebar.button("Log Out"):
-        for key in ("token", "username", "role"):
-            st.session_state.pop(key, None)
-        st.rerun()
-
-    selected_jtf = st.sidebar.selectbox("Joint Task Force", ["All", "JTF ZAMPELAN", "JTF ORION", "JTF Central", "JTF Poseidon"])
-    selected_vector = st.sidebar.selectbox("Thematic Vector", ["All", "Electoral Security", "Securitization & Threat Groups", "Territorial & Maritime Security"])
-
-    header_col, search_col = st.columns([3, 1])
-    with header_col:
+    icon_col, title_col, user_col = st.columns([0.6, 3, 1.4])
+    with icon_col:
+        st.markdown(f'<div class="sidebar-icon">{STRAWBERRY_ICON}</div>', unsafe_allow_html=True)
+    with title_col:
         st.markdown('<span class="badge-pill">▸ Regional OSINT Platform · WESMINCOM</span>', unsafe_allow_html=True)
-        st.title("🛡️ Regional Situational Awareness & OSINT Dashboard")
-    with search_col:
-        st.markdown("<div style='height:2.3em;'></div>", unsafe_allow_html=True)
-        render_compact_search()
+        st.title("Open Source Intelligence")
+    with user_col:
+        st.markdown("<div style='height:1.6em;'></div>", unsafe_allow_html=True)
+        st.markdown(f"Signed in as **{st.session_state['username']}** ({st.session_state['role']})")
+        if st.button("Log Out"):
+            for key in ("token", "username", "role"):
+                st.session_state.pop(key, None)
+            st.rerun()
 
-    now_str = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M UTC")
+    filter_jtf, filter_vec, search_col, clock_col = st.columns([1.2, 1.6, 1.6, 1])
+    with filter_jtf:
+        selected_jtf = st.selectbox("Joint Task Force", ["All", "JTF ZAMPELAN", "JTF ORION", "JTF Central", "JTF Poseidon"])
+    with filter_vec:
+        selected_vector = st.selectbox("Thematic Vector", ["All", "Electoral Security", "Securitization & Threat Groups", "Territorial & Maritime Security"])
+    with search_col:
+        st.markdown("<div style='height:1.9em;'></div>", unsafe_allow_html=True)
+        render_compact_search()
+    with clock_col:
+        render_live_clock()
+
     st.markdown(
-        f'<div class="ops-banner"><span><span class="status-dot"></span><span class="live">SYSTEM ONLINE</span> · SCAN: HOURLY / ON-DEMAND</span>'
-        f'<span>{now_str}</span></div>',
+        '<div class="ops-banner"><span><span class="status-dot"></span><span class="live">SYSTEM ONLINE</span> · SCAN: HOURLY / ON-DEMAND</span></div>',
         unsafe_allow_html=True,
     )
+    st.markdown("---")
+
+    render_source_browser()
     st.markdown("---")
 
     render_alerts()
