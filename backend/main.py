@@ -4,11 +4,12 @@ from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import literal_column, text
 from sqlalchemy.orm import Session
 
 from auth import create_access_token, get_current_user, hash_password, log_audit, require_role, verify_password
 from database import Base, engine, get_db
+from embeddings import embed, to_pgvector_literal
 from models import ActivityType, OSINTRecord, RoleEnum, ThematicVector, User
 
 with engine.connect() as conn:
@@ -67,6 +68,10 @@ class OSINTRecordOut(BaseModel):
         from_attributes = True
 
 
+class OSINTRecordSearchOut(OSINTRecordOut):
+    similarity: float = 0.0
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -110,6 +115,33 @@ def list_records(db: Session = Depends(get_db), current_user: User = Depends(get
     return db.query(OSINTRecord).order_by(OSINTRecord.created_at.desc()).all()
 
 
+@app.get("/records/search", response_model=list[OSINTRecordSearchOut])
+def search_records(
+    q: str,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    query_vector = to_pgvector_literal(embed(q))
+    # query_vector is generated internally from floats (never raw user text), so inlining is safe.
+    distance_expr = literal_column(f"(embedding <=> '{query_vector}'::vector)")
+
+    rows = (
+        db.query(OSINTRecord, distance_expr.label("distance"))
+        .filter(OSINTRecord.embedding.isnot(None))
+        .order_by(distance_expr)
+        .limit(limit)
+        .all()
+    )
+
+    results = []
+    for record, distance in rows:
+        item = OSINTRecordSearchOut.model_validate(record)
+        item.similarity = 1 - distance
+        results.append(item)
+    return results
+
+
 @app.post("/records/", response_model=OSINTRecordOut)
 def create_record(
     record: OSINTRecordCreate,
@@ -117,6 +149,7 @@ def create_record(
     current_user: User = Depends(require_role(RoleEnum.Admin, RoleEnum.Analyst)),
 ):
     db_record = OSINTRecord(**record.model_dump())
+    db_record.embedding = embed(record.content)
     db.add(db_record)
     db.commit()
     db.refresh(db_record)

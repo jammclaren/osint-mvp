@@ -151,6 +151,29 @@ def render_heatmap(df: pd.DataFrame) -> None:
     st.plotly_chart(fig, use_container_width=True)
 
 
+def render_semantic_search() -> None:
+    with st.expander("🔎 Semantic Search"):
+        query = st.text_input("Search by meaning (not just keywords)", key="semantic_query")
+        if query:
+            try:
+                resp = requests.get(f"{API_URL}/records/search", params={"q": query, "limit": 10}, headers=auth_headers())
+                if resp.status_code == 200:
+                    results = resp.json()
+                    if results:
+                        results_df = pd.DataFrame(results)
+                        results_df["similarity"] = results_df["similarity"].map(lambda s: f"{s:.2f}")
+                        st.dataframe(
+                            results_df[["similarity", "jtf_assignment", "province", "thematic_vector", "content", "created_at"]],
+                            use_container_width=True,
+                        )
+                    else:
+                        st.info("No matches — records need an embedding, which is only generated for records created after this feature shipped.")
+                else:
+                    st.error(resp.json().get("detail", "Search failed"))
+            except Exception as e:
+                st.error(f"Connection error: {e}")
+
+
 def render_dashboard() -> None:
     st.sidebar.header("Operational Parameters")
     st.sidebar.markdown(f"Signed in as **{st.session_state['username']}** ({st.session_state['role']})")
@@ -167,6 +190,8 @@ def render_dashboard() -> None:
 
     if st.session_state["role"] in ("Admin", "Analyst"):
         render_ingestion_form()
+
+    render_semantic_search()
 
     st.subheader("Live Telemetry & Threat Feed")
 
