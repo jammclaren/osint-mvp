@@ -325,7 +325,7 @@ def render_topic_summary(cat_df: pd.DataFrame) -> None:
         violent = len(sub[sub["activity_type"] == "Violent"])
         top_province = sub["province"].value_counts().index[0] if not sub["province"].value_counts().empty else "N/A"
         latest = pd.to_datetime(sub["created_at"]).max()
-        latest_str = latest.strftime("%Y-%m-%d %H:%M UTC") if pd.notna(latest) else "N/A"
+        latest_str = (latest + pd.Timedelta(hours=8)).strftime("%Y-%m-%d %H:%M PHT") if pd.notna(latest) else "N/A"
 
         with st.expander(f"{category} — {len(sub)} post(s)"):
             st.markdown(
@@ -530,15 +530,18 @@ def render_live_clock() -> None:
     components.html("""
     <div id="osint-clock" style="font-family:'Share Tech Mono',monospace;color:#7c8268;
         font-size:0.75rem;letter-spacing:0.08em;text-align:right;background:transparent;
-        padding-top:6px;">--:--:-- UTC</div>
+        padding-top:6px;">--:--:-- PHT</div>
     <script>
     function tick() {
         var el = document.getElementById('osint-clock');
         if (!el) return;
         var now = new Date();
+        // Philippines is UTC+8 year-round (no DST) -- shift the true epoch, then read
+        // the UTC fields of the shifted timestamp to get the correct PH wall-clock date/time.
+        var ph = new Date(now.getTime() + 8 * 60 * 60 * 1000);
         var pad = function(n) { return String(n).padStart(2, '0'); };
-        el.textContent = now.getUTCFullYear() + '-' + pad(now.getUTCMonth()+1) + '-' + pad(now.getUTCDate())
-            + ' ' + pad(now.getUTCHours()) + ':' + pad(now.getUTCMinutes()) + ':' + pad(now.getUTCSeconds()) + ' UTC';
+        el.textContent = ph.getUTCFullYear() + '-' + pad(ph.getUTCMonth()+1) + '-' + pad(ph.getUTCDate())
+            + ' ' + pad(ph.getUTCHours()) + ':' + pad(ph.getUTCMinutes()) + ':' + pad(ph.getUTCSeconds()) + ' PHT';
     }
     tick();
     setInterval(tick, 1000);
@@ -612,21 +615,30 @@ def render_auto_assessment(df: pd.DataFrame, alerts: list) -> None:
 
 
 def render_dashboard() -> None:
-    icon_col, title_col, user_col = st.columns([0.6, 3, 1.4])
-    with icon_col:
-        st.markdown(f'<div class="sidebar-icon">{STRAWBERRY_ICON}</div>', unsafe_allow_html=True)
+    title_col, user_col = st.columns([3.2, 1.2])
     with title_col:
-        st.markdown('<span class="badge-pill">▸ Regional OSINT Platform · WESMINCOM</span>', unsafe_allow_html=True)
-        st.title("Open Source Intelligence")
+        st.markdown(
+            f'<div style="display:flex; align-items:center; gap:14px;">'
+            f'<div class="sidebar-icon" style="margin-bottom:0;">{STRAWBERRY_ICON}</div>'
+            f'<div><span class="badge-pill">▸ Regional OSINT Platform · WESMINCOM</span>'
+            f'<h1 style="margin:0; padding:0;">Open Source Intelligence</h1></div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
     with user_col:
         st.markdown("<div style='height:1.6em;'></div>", unsafe_allow_html=True)
-        st.markdown(f"Signed in as **{st.session_state['username']}** ({st.session_state['role']})")
-        if st.button("Log Out"):
-            for key in ("token", "username", "role"):
-                st.session_state.pop(key, None)
-            st.rerun()
+        st.markdown(
+            f'<div style="text-align:right;">Signed in as <b>{st.session_state["username"]}</b> ({st.session_state["role"]})</div>',
+            unsafe_allow_html=True,
+        )
+        _, logout_col = st.columns([1, 1])
+        with logout_col:
+            if st.button("Log Out"):
+                for key in ("token", "username", "role"):
+                    st.session_state.pop(key, None)
+                st.rerun()
 
-    filter_jtf, filter_vec, search_col, clock_col = st.columns([1.2, 1.6, 1.6, 1])
+    filter_jtf, filter_vec, search_col, clock_col = st.columns([1, 1, 1, 1])
     with filter_jtf:
         selected_jtf = st.selectbox("Joint Task Force", ["All", "JTF ZAMPELAN", "JTF ORION", "JTF Central", "JTF Poseidon"])
     with filter_vec:
