@@ -260,6 +260,7 @@ def render_login() -> None:
 SMI_CATEGORIES = {
     "Local Terrorist Groups": ["isis", "abu sayyaf", "daulah islamiyah", "dawlah islamiyah", "asg", "maute"],
     "Communist Terrorist Groups": ["cpp-npa-ndf", "cpp-npa", "cpp", "npa", "ndf"],
+    "Peace Inclined Groups (MILF/MNLF)": ["milf", "mnlf", "moro islamic liberation front", "moro national liberation front", "bangsamoro transition authority"],
     "BARMM Parliamentary Elections": ["barmm", "bangsamoro parliament", "bpe", "parliamentary election", "comelec", "bangsamoro"],
     "West Philippine Sea & Sabah": ["west philippine sea", "wps", "sabah", "south china sea"],
 }
@@ -338,7 +339,7 @@ def render_category_breakdown(df: pd.DataFrame) -> pd.DataFrame:
     fig.update_xaxes(title=None)
     st.plotly_chart(fig, use_container_width=True)
 
-    cols = st.columns(4)
+    cols = st.columns(len(SMI_CATEGORIES))
     for i, category in enumerate(SMI_CATEGORIES.keys()):
         sub = cat_df[cat_df["smi_category"] == category]
         with cols[i]:
