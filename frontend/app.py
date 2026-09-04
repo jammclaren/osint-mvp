@@ -1,10 +1,9 @@
 import streamlit as st
 import requests
 import os
+import re
 import pandas as pd
-import networkx as nx
 import plotly.express as px
-import plotly.graph_objects as go
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
@@ -137,43 +136,49 @@ def auth_headers() -> dict:
 
 
 def render_login() -> None:
-    st.markdown(f'<div class="sidebar-icon" style="text-align:left;">{STRAWBERRY_ICON}</div>', unsafe_allow_html=True)
-    st.markdown('<span class="badge-pill">▸ Regional OSINT Platform · WESMINCOM</span>', unsafe_allow_html=True)
-    st.title("🛡️ OSINT Dashboard — Sign In")
-    login_tab, register_tab = st.tabs(["Login", "Register"])
+    left, center, right = st.columns([1, 1.3, 1])
+    with center:
+        st.markdown(f'<div class="sidebar-icon">{STRAWBERRY_ICON}</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div style="text-align:center;"><span class="badge-pill">▸ Regional OSINT Platform · WESMINCOM</span></div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown('<h2 style="text-align:center;">OSINT — Sign In</h2>', unsafe_allow_html=True)
 
-    with login_tab:
-        with st.form("login_form"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            if st.form_submit_button("Sign In") and username and password:
-                try:
-                    resp = requests.post(f"{API_URL}/auth/login", data={"username": username, "password": password})
-                    if resp.status_code == 200:
-                        st.session_state["token"] = resp.json()["access_token"]
-                        me = requests.get(f"{API_URL}/auth/me", headers={"Authorization": f"Bearer {st.session_state['token']}"})
-                        st.session_state["username"] = me.json()["username"]
-                        st.session_state["role"] = me.json()["role"]
-                        st.rerun()
-                    else:
-                        st.error(resp.json().get("detail", "Login failed"))
-                except Exception as e:
-                    st.error(f"Connection error: {e}")
+        login_tab, register_tab = st.tabs(["Login", "Register"])
 
-    with register_tab:
-        st.caption("The first account registered becomes Admin. Later accounts default to Viewer.")
-        with st.form("register_form"):
-            username = st.text_input("Choose a username")
-            password = st.text_input("Choose a password", type="password")
-            if st.form_submit_button("Register") and username and password:
-                try:
-                    resp = requests.post(f"{API_URL}/auth/register", json={"username": username, "password": password})
-                    if resp.status_code == 200:
-                        st.success("Account created. Switch to the Login tab to sign in.")
-                    else:
-                        st.error(resp.json().get("detail", "Registration failed"))
-                except Exception as e:
-                    st.error(f"Connection error: {e}")
+        with login_tab:
+            with st.form("login_form"):
+                username = st.text_input("Username")
+                password = st.text_input("Password", type="password")
+                if st.form_submit_button("Sign In") and username and password:
+                    try:
+                        resp = requests.post(f"{API_URL}/auth/login", data={"username": username, "password": password})
+                        if resp.status_code == 200:
+                            st.session_state["token"] = resp.json()["access_token"]
+                            me = requests.get(f"{API_URL}/auth/me", headers={"Authorization": f"Bearer {st.session_state['token']}"})
+                            st.session_state["username"] = me.json()["username"]
+                            st.session_state["role"] = me.json()["role"]
+                            st.rerun()
+                        else:
+                            st.error(resp.json().get("detail", "Login failed"))
+                    except Exception as e:
+                        st.error(f"Connection error: {e}")
+
+        with register_tab:
+            st.caption("The first account registered becomes Admin. Later accounts default to Viewer.")
+            with st.form("register_form"):
+                username = st.text_input("Choose a username")
+                password = st.text_input("Choose a password", type="password")
+                if st.form_submit_button("Register") and username and password:
+                    try:
+                        resp = requests.post(f"{API_URL}/auth/register", json={"username": username, "password": password})
+                        if resp.status_code == 200:
+                            st.success("Account created. Switch to the Login tab to sign in.")
+                        else:
+                            st.error(resp.json().get("detail", "Registration failed"))
+                    except Exception as e:
+                        st.error(f"Connection error: {e}")
 
 
 PLATFORM_OPTIONS = ["X/Twitter", "Telegram", "Facebook", "Field Report"]
@@ -358,38 +363,37 @@ def render_leaderboard(df: pd.DataFrame) -> None:
     st.plotly_chart(fig, use_container_width=True)
 
 
-def render_network(df: pd.DataFrame) -> None:
-    graph = nx.Graph()
-    for _, row in df.iterrows():
-        graph.add_edge(row["jtf_assignment"], row["province"])
-    pos = nx.spring_layout(graph, seed=42)
-
-    edge_x, edge_y = [], []
-    for u, v in graph.edges():
-        x0, y0 = pos[u]
-        x1, y1 = pos[v]
-        edge_x += [x0, x1, None]
-        edge_y += [y0, y1, None]
-    edge_trace = go.Scatter(x=edge_x, y=edge_y, line=dict(width=1, color="#888"), hoverinfo="none", mode="lines")
-
-    node_x = [pos[n][0] for n in graph.nodes()]
-    node_y = [pos[n][1] for n in graph.nodes()]
-    node_trace = go.Scatter(
-        x=node_x, y=node_y, mode="markers+text", text=list(graph.nodes()),
-        textposition="top center", marker=dict(size=14),
+def render_sentiment_trend(df: pd.DataFrame) -> None:
+    trend = df.copy()
+    trend["date"] = pd.to_datetime(trend["created_at"]).dt.date
+    daily = trend.groupby("date")["sentiment_score"].mean().reset_index()
+    fig = px.line(
+        daily, x="date", y="sentiment_score", markers=True,
+        title="Sentiment Trend — Avg. Sentiment by Day",
     )
-
-    fig = go.Figure(data=[edge_trace, node_trace])
-    fig.update_layout(
-        title="JTF ↔ Province Network", showlegend=False,
-        xaxis=dict(visible=False), yaxis=dict(visible=False),
-    )
+    fig.add_hline(y=0, line_dash="dot", line_color="#7c8268")
+    fig.update_yaxes(range=[-1, 1])
     st.plotly_chart(fig, use_container_width=True)
 
 
-def render_heatmap(df: pd.DataFrame) -> None:
-    heat = pd.crosstab(df["thematic_vector"], df["province"])
-    fig = px.imshow(heat, aspect="auto", title="Co-occurrence — Thematic Vector × Province")
+def render_keyword_frequency(alerts: list) -> None:
+    keyword_alerts = [a for a in alerts if a["rule_type"] == "keyword_match"]
+    if not keyword_alerts:
+        st.caption("No keyword mentions detected yet.")
+        return
+
+    terms = []
+    for a in keyword_alerts:
+        m = re.search(r"Keyword '([^']+)'", a["message"])
+        if m:
+            terms.append(m.group(1))
+
+    if not terms:
+        return
+
+    counts = pd.Series(terms).value_counts().reset_index()
+    counts.columns = ["keyword", "mentions"]
+    fig = px.bar(counts, x="keyword", y="mentions", title="Top Tracked Keyword Mentions")
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -628,10 +632,20 @@ def render_dashboard() -> None:
                 with col2:
                     render_leaderboard(df)
 
-                render_platform_distribution(df)
+                st.markdown("---")
+                st.subheader("📊 Social Media Intelligence Overview")
 
-                render_network(df)
-                render_heatmap(df)
+                col3, col4 = st.columns(2)
+                with col3:
+                    render_platform_distribution(df)
+                with col4:
+                    render_sentiment_trend(df)
+
+                try:
+                    all_alerts = requests.get(f"{API_URL}/alerts/", headers=auth_headers()).json()
+                    render_keyword_frequency(all_alerts)
+                except Exception:
+                    pass
 
                 st.markdown("---")
                 render_trend_spikes(df)

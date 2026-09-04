@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists//*
 
-RUN pip install --no-cache-dir streamlit requests pandas networkx plotly
+RUN pip install --no-cache-dir streamlit requests pandas plotly
 
 COPY app.py .
 
