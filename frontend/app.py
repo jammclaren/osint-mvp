@@ -15,13 +15,85 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.title("🛡️ Regional Situational Awareness & OSINT Dashboard")
-st.markdown("---")
 
-# Sidebar Filters
-st.sidebar.header("Operational Parameters")
-selected_jtf = st.sidebar.selectbox("Joint Task Force", ["All", "JTF ZAMPELAN", "JTF ORION", "JTF Central", "JTF Poseidon"])
-selected_vector = st.sidebar.selectbox("Thematic Vector", ["All", "Electoral Security", "Securitization & Threat Groups", "Territorial & Maritime Security"])
+def auth_headers() -> dict:
+    return {"Authorization": f"Bearer {st.session_state['token']}"}
+
+
+def render_login() -> None:
+    st.title("🛡️ OSINT Dashboard — Sign In")
+    login_tab, register_tab = st.tabs(["Login", "Register"])
+
+    with login_tab:
+        with st.form("login_form"):
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            if st.form_submit_button("Sign In") and username and password:
+                try:
+                    resp = requests.post(f"{API_URL}/auth/login", data={"username": username, "password": password})
+                    if resp.status_code == 200:
+                        st.session_state["token"] = resp.json()["access_token"]
+                        me = requests.get(f"{API_URL}/auth/me", headers={"Authorization": f"Bearer {st.session_state['token']}"})
+                        st.session_state["username"] = me.json()["username"]
+                        st.session_state["role"] = me.json()["role"]
+                        st.rerun()
+                    else:
+                        st.error(resp.json().get("detail", "Login failed"))
+                except Exception as e:
+                    st.error(f"Connection error: {e}")
+
+    with register_tab:
+        st.caption("The first account registered becomes Admin. Later accounts default to Viewer.")
+        with st.form("register_form"):
+            username = st.text_input("Choose a username")
+            password = st.text_input("Choose a password", type="password")
+            if st.form_submit_button("Register") and username and password:
+                try:
+                    resp = requests.post(f"{API_URL}/auth/register", json={"username": username, "password": password})
+                    if resp.status_code == 200:
+                        st.success("Account created. Switch to the Login tab to sign in.")
+                    else:
+                        st.error(resp.json().get("detail", "Registration failed"))
+                except Exception as e:
+                    st.error(f"Connection error: {e}")
+
+
+def render_ingestion_form() -> None:
+    with st.expander("➕ Log New OSINT Record"):
+        with st.form("new_record_form"):
+            content = st.text_area("Content")
+            col1, col2 = st.columns(2)
+            with col1:
+                jtf_assignment = st.selectbox("Joint Task Force", ["JTF ZAMPELAN", "JTF ORION", "JTF Central", "JTF Poseidon"])
+                thematic_vector = st.selectbox("Thematic Vector", ["Electoral Security", "Securitization & Threat Groups", "Territorial & Maritime Security"])
+                province = st.text_input("Province")
+            with col2:
+                activity_type = st.selectbox("Activity Type", ["Non-Violent", "Violent"])
+                threat_score = st.slider("Threat Score", 0.0, 10.0, 0.0, 0.1)
+                sentiment_score = st.slider("Sentiment Score", -1.0, 1.0, 0.0, 0.1)
+            source_url = st.text_input("Source URL (optional)")
+
+            if st.form_submit_button("Submit Record") and content and province:
+                payload = {
+                    "content": content,
+                    "jtf_assignment": jtf_assignment,
+                    "thematic_vector": thematic_vector,
+                    "province": province,
+                    "activity_type": activity_type,
+                    "threat_score": threat_score,
+                    "sentiment_score": sentiment_score,
+                    "source_url": source_url or None,
+                }
+                try:
+                    resp = requests.post(f"{API_URL}/records/", json=payload, headers=auth_headers())
+                    if resp.status_code == 200:
+                        st.success("Record logged.")
+                        st.rerun()
+                    else:
+                        st.error(resp.json().get("detail", "Failed to submit record"))
+                except Exception as e:
+                    st.error(f"Connection error: {e}")
+
 
 def render_timeline(df: pd.DataFrame) -> None:
     timeline = df.copy()
@@ -79,37 +151,63 @@ def render_heatmap(df: pd.DataFrame) -> None:
     st.plotly_chart(fig, use_container_width=True)
 
 
-st.subheader("Live Telemetry & Threat Feed")
+def render_dashboard() -> None:
+    st.sidebar.header("Operational Parameters")
+    st.sidebar.markdown(f"Signed in as **{st.session_state['username']}** ({st.session_state['role']})")
+    if st.sidebar.button("Log Out"):
+        for key in ("token", "username", "role"):
+            st.session_state.pop(key, None)
+        st.rerun()
 
-try:
-    response = requests.get(f"{API_URL}/records/")
-    if response.status_code == 200:
-        records = response.json()
-        if records:
-            df = pd.DataFrame(records)
+    selected_jtf = st.sidebar.selectbox("Joint Task Force", ["All", "JTF ZAMPELAN", "JTF ORION", "JTF Central", "JTF Poseidon"])
+    selected_vector = st.sidebar.selectbox("Thematic Vector", ["All", "Electoral Security", "Securitization & Threat Groups", "Territorial & Maritime Security"])
 
-            # Apply filters
-            if selected_jtf != "All":
-                df = df[df["jtf_assignment"] == selected_jtf]
-            if selected_vector != "All":
-                df = df[df["thematic_vector"] == selected_vector]
+    st.title("🛡️ Regional Situational Awareness & OSINT Dashboard")
+    st.markdown("---")
 
-            st.dataframe(df[["id", "jtf_assignment", "province", "thematic_vector", "activity_type", "threat_score", "content", "created_at"]], use_container_width=True)
+    if st.session_state["role"] in ("Admin", "Analyst"):
+        render_ingestion_form()
 
-            st.markdown("---")
-            render_timeline(df)
+    st.subheader("Live Telemetry & Threat Feed")
 
-            col1, col2 = st.columns(2)
-            with col1:
-                render_distribution(df)
-            with col2:
-                render_leaderboard(df)
+    try:
+        response = requests.get(f"{API_URL}/records/", headers=auth_headers())
+        if response.status_code == 200:
+            records = response.json()
+            if records:
+                df = pd.DataFrame(records)
 
-            render_network(df)
-            render_heatmap(df)
+                if selected_jtf != "All":
+                    df = df[df["jtf_assignment"] == selected_jtf]
+                if selected_vector != "All":
+                    df = df[df["thematic_vector"] == selected_vector]
+
+                st.dataframe(df[["id", "jtf_assignment", "province", "thematic_vector", "activity_type", "threat_score", "content", "created_at"]], use_container_width=True)
+
+                st.markdown("---")
+                render_timeline(df)
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    render_distribution(df)
+                with col2:
+                    render_leaderboard(df)
+
+                render_network(df)
+                render_heatmap(df)
+            else:
+                st.info("No OSINT records found in local database. Use the form above to log one.")
+        elif response.status_code == 401:
+            for key in ("token", "username", "role"):
+                st.session_state.pop(key, None)
+            st.rerun()
         else:
-            st.info("No OSINT records found in local database. Ingest telemetry payloads via API.")
-    else:
-        st.error("Failed to connect to backend telemetry service.")
-except Exception as e:
-    st.error(f"Connection error: {e}")
+            st.error("Failed to connect to backend telemetry service.")
+    except Exception as e:
+        st.error(f"Connection error: {e}")
+
+
+if "token" not in st.session_state:
+    render_login()
+else:
+    render_dashboard()
