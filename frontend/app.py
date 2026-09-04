@@ -4,6 +4,7 @@ import requests
 import os
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
@@ -288,6 +289,40 @@ def render_kpis(df: pd.DataFrame, active_sources: int) -> None:
     c4.metric("High-Threat", len(high_threat))
     c5.metric("Active Sources", active_sources)
     st.caption(f"Reflects {len(this_week)} post(s) in the last 7 days, extracted from Monitored Sources.")
+
+
+def render_daily_trend(df: pd.DataFrame) -> None:
+    trend = df.copy()
+    trend["date"] = pd.to_datetime(trend["created_at"]).dt.tz_localize(None).dt.normalize()
+
+    today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
+    date_range = pd.date_range(end=today, periods=14, freq="D")
+
+    daily_counts = trend.groupby("date").size().reindex(date_range, fill_value=0)
+    labels = [d.strftime("%b %d") for d in daily_counts.index]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=labels, y=daily_counts.values,
+        mode="lines+markers",
+        line=dict(color="#d9a441", width=2.5, shape="spline"),
+        marker=dict(size=6, color="#d9a441", line=dict(width=1, color="#0a0a0a")),
+        fill="tozeroy",
+        fillgradient=dict(
+            type="vertical",
+            colorscale=[[0, "rgba(217,164,65,0.02)"], [1, "rgba(217,164,65,0.45)"]],
+        ),
+        hovertemplate="%{x}: %{y} post(s)<extra></extra>",
+    ))
+    fig.update_layout(
+        title="14-Day Daily Post Trend",
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#d8dccc", family="Rajdhani"),
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=True, gridcolor="rgba(217,164,65,0.08)", title="Posts"),
+        margin=dict(t=50, b=30),
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 
 def render_category_breakdown(df: pd.DataFrame) -> pd.DataFrame:
@@ -682,6 +717,8 @@ def render_dashboard() -> None:
                 st.subheader("📊 Social Media Intelligence Overview")
                 st.caption("All entries extracted from Monitored Sources (public pages, officials, vloggers).")
                 render_kpis(df, active_source_count)
+                st.markdown("---")
+                render_daily_trend(df)
                 st.markdown("---")
                 cat_df = render_category_breakdown(df)
                 st.markdown("---")
