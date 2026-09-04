@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: osint_db
+    environment:
+      POSTGRES_USER: osint_admin
+      POSTGRES_PASSWORD: secure_local_password
+      POSTGRES_DB: osint_mvp
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: osint_backend
+    environment:
+      DATABASE_URL: postgresql://osint_admin:secure_local_password@db:5432/osint_mvp
+      JWT_SECRET_KEY: local_dev_secret_change_in_production
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: osint_frontend
+    environment:
+      API_URL: http://backend:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
