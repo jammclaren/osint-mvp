@@ -32,35 +32,70 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+st.markdown(
+    '<link rel="preconnect" href="https://fonts.googleapis.com">'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+    '<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">',
+    unsafe_allow_html=True,
+)
+
 st.markdown("""
 <style>
 :root {
     --bg: #0a0a0a;
-    --panel: #141414;
-    --panel-border: #2a2a2a;
+    --panel: #12140f;
+    --panel-border: #2a2f22;
     --gold: #d9a441;
     --gold-hover: #e8b755;
     --gold-dim: rgba(217, 164, 65, 0.12);
-    --text: #e8e8e8;
-    --text-muted: #9a9a9a;
+    --text: #d8dccc;
+    --text-muted: #7c8268;
     --green: #4ade80;
+    --amber-glow: rgba(217, 164, 65, 0.25);
 }
 
-.stApp, [data-testid="stAppViewContainer"] { background-color: var(--bg); color: var(--text); }
+html, body, .stApp, [data-testid="stAppViewContainer"] {
+    background-color: var(--bg); color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+}
+[data-testid="stAppViewContainer"] {
+    background-image:
+        linear-gradient(rgba(217,164,65,0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(217,164,65,0.035) 1px, transparent 1px);
+    background-size: 32px 32px;
+}
 [data-testid="stHeader"] { background-color: var(--bg); }
-[data-testid="stSidebar"] { background-color: #0d0d0d; border-right: 1px solid var(--panel-border); }
+[data-testid="stSidebar"] { background-color: #0d0f0a; border-right: 1px solid var(--panel-border); }
 
-h1, h2, h3, h4 { color: var(--text) !important; letter-spacing: 0.02em; }
+h1, h2, h3, h4 { color: var(--text) !important; letter-spacing: 0.03em; font-family: 'Rajdhani', sans-serif; font-weight: 700 !important; text-transform: uppercase; }
+p, span, div, label, li { font-family: 'Rajdhani', sans-serif; }
+code, .stCode, [data-testid="stMetricValue"], [data-testid="stMetricLabel"] { font-family: 'Share Tech Mono', monospace !important; }
+
+.ops-banner {
+    display: flex; justify-content: space-between; align-items: center;
+    border: 1px solid var(--panel-border); border-left: 3px solid var(--gold);
+    background: linear-gradient(90deg, rgba(217,164,65,0.06), transparent);
+    padding: 6px 14px; margin-bottom: 14px;
+    font-family: 'Share Tech Mono', monospace; font-size: 0.7rem; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--text-muted);
+}
+.ops-banner .live { color: var(--green); }
 
 .badge-pill {
     display: inline-block; padding: 4px 12px; border: 1px solid var(--gold);
-    border-radius: 999px; color: var(--gold); font-size: 0.72rem; font-weight: 700;
-    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 12px;
+    border-radius: 2px; color: var(--gold); font-size: 0.72rem; font-weight: 700;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px;
+    clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px);
 }
 .status-dot {
     display: inline-block; width: 8px; height: 8px; border-radius: 50%;
     background-color: var(--green); margin-right: 6px;
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse 1.6s infinite;
 }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
 .sidebar-icon { text-align: center; margin-bottom: 4px; }
 .sidebar-icon svg {
     background-color: #f4f1e8; border: 2px solid var(--gold); border-radius: 50%;
@@ -69,24 +104,30 @@ h1, h2, h3, h4 { color: var(--text) !important; letter-spacing: 0.02em; }
 
 .stButton > button {
     background-color: transparent; color: var(--gold); border: 1px solid var(--gold);
-    border-radius: 6px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.8rem;
+    border-radius: 2px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.8rem;
+    font-family: 'Share Tech Mono', monospace;
 }
-.stButton > button:hover { background-color: var(--gold-dim); border-color: var(--gold-hover); color: var(--gold-hover); }
+.stButton > button:hover { background-color: var(--gold-dim); border-color: var(--gold-hover); color: var(--gold-hover); box-shadow: 0 0 10px var(--amber-glow); }
 
 [data-testid="stFormSubmitButton"] > button {
     background-color: var(--gold); color: #0a0a0a; border: none;
-    border-radius: 6px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    border-radius: 2px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    font-family: 'Share Tech Mono', monospace;
 }
-[data-testid="stFormSubmitButton"] > button:hover { background-color: var(--gold-hover); color: #0a0a0a; }
+[data-testid="stFormSubmitButton"] > button:hover { background-color: var(--gold-hover); color: #0a0a0a; box-shadow: 0 0 12px var(--amber-glow); }
 
-[data-testid="stExpander"] { background-color: var(--panel); border: 1px solid var(--panel-border); border-radius: 10px; }
+[data-testid="stExpander"] { background-color: var(--panel); border: 1px solid var(--panel-border); border-radius: 2px; }
+[data-testid="stMetric"] {
+    background-color: var(--panel); border: 1px solid var(--panel-border); border-left: 2px solid var(--gold);
+    border-radius: 2px; padding: 10px 14px;
+}
 
-input, textarea { background-color: #1a1a1a !important; border-color: var(--panel-border) !important; color: var(--text) !important; }
-[data-baseweb="select"] > div { background-color: #1a1a1a !important; border-color: var(--panel-border) !important; }
+input, textarea { background-color: #14150f !important; border-color: var(--panel-border) !important; color: var(--text) !important; border-radius: 2px !important; }
+[data-baseweb="select"] > div { background-color: #14150f !important; border-color: var(--panel-border) !important; border-radius: 2px !important; }
 
-[data-testid="stDataFrame"] { border: 1px solid var(--panel-border); border-radius: 8px; }
-.stAlert { border-radius: 8px; }
-[data-testid="stMetricValue"] { color: var(--gold) !important; }
+[data-testid="stDataFrame"] { border: 1px solid var(--panel-border); border-radius: 2px; }
+.stAlert { border-radius: 2px; }
+[data-testid="stMetricValue"] { color: var(--gold) !important; text-shadow: 0 0 8px var(--amber-glow); }
 </style>
 """, unsafe_allow_html=True)
 
@@ -135,6 +176,10 @@ def render_login() -> None:
                     st.error(f"Connection error: {e}")
 
 
+PLATFORM_OPTIONS = ["X/Twitter", "Telegram", "Facebook", "Field Report"]
+PLATFORM_ICON = {"X/Twitter": "🐦", "Telegram": "✈️", "Facebook": "📘", "Field Report": "📋"}
+
+
 def render_ingestion_form() -> None:
     with st.expander("➕ Log New OSINT Record"):
         with st.form("new_record_form"):
@@ -144,11 +189,12 @@ def render_ingestion_form() -> None:
                 jtf_assignment = st.selectbox("Joint Task Force", ["JTF ZAMPELAN", "JTF ORION", "JTF Central", "JTF Poseidon"])
                 thematic_vector = st.selectbox("Thematic Vector", ["Electoral Security", "Securitization & Threat Groups", "Territorial & Maritime Security"])
                 province = st.text_input("Province")
+                source_platform = st.selectbox("Source Platform", PLATFORM_OPTIONS)
             with col2:
                 activity_type = st.selectbox("Activity Type", ["Non-Violent", "Violent"])
                 threat_score = st.slider("Threat Score", 0.0, 10.0, 0.0, 0.1)
                 sentiment_score = st.slider("Sentiment Score", -1.0, 1.0, 0.0, 0.1)
-            source_url = st.text_input("Source URL (optional)")
+            source_url = st.text_input("Source URL / Post Link (optional)")
 
             if st.form_submit_button("Submit Record") and content and province:
                 payload = {
@@ -159,6 +205,7 @@ def render_ingestion_form() -> None:
                     "activity_type": activity_type,
                     "threat_score": threat_score,
                     "sentiment_score": sentiment_score,
+                    "source_platform": source_platform,
                     "source_url": source_url or None,
                 }
                 try:
@@ -187,6 +234,8 @@ def render_edit_delete(df: pd.DataFrame) -> None:
                 jtf_assignment = st.selectbox("Joint Task Force", jtf_options, index=jtf_options.index(record["jtf_assignment"]) if record["jtf_assignment"] in jtf_options else 0)
                 thematic_vector = st.selectbox("Thematic Vector", vector_options, index=vector_options.index(record["thematic_vector"]) if record["thematic_vector"] in vector_options else 0)
                 province = st.text_input("Province", value=record["province"])
+                current_platform = record.get("source_platform", "Field Report")
+                source_platform = st.selectbox("Source Platform", PLATFORM_OPTIONS, index=PLATFORM_OPTIONS.index(current_platform) if current_platform in PLATFORM_OPTIONS else 3)
             with col2:
                 activity_type = st.selectbox("Activity Type", activity_options, index=activity_options.index(record["activity_type"]) if record["activity_type"] in activity_options else 0)
                 threat_score = st.slider("Threat Score", 0.0, 10.0, float(record["threat_score"]), 0.1)
@@ -203,6 +252,7 @@ def render_edit_delete(df: pd.DataFrame) -> None:
                     "content": content, "jtf_assignment": jtf_assignment, "thematic_vector": thematic_vector,
                     "province": province, "activity_type": activity_type,
                     "threat_score": threat_score, "sentiment_score": sentiment_score,
+                    "source_platform": source_platform,
                 }
                 try:
                     resp = requests.patch(f"{API_URL}/records/{record_id}", json=payload, headers=auth_headers())
@@ -235,6 +285,64 @@ def render_timeline(df: pd.DataFrame) -> None:
     counts = timeline.groupby(["date", "activity_type"]).size().reset_index(name="count")
     fig = px.bar(counts, x="date", y="count", color="activity_type", barmode="stack", title="Records by Day")
     st.plotly_chart(fig, use_container_width=True)
+
+
+def render_kpis(df: pd.DataFrame, active_sources: int) -> None:
+    created = pd.to_datetime(df["created_at"])
+    now = pd.Timestamp.now(tz="UTC")
+    this_week = created[created >= now - pd.Timedelta(days=7)]
+    high_threat = df[df["threat_score"] >= 7.0]
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total Monitored Incidents", len(df))
+    c2.metric("Incidents — Last 7 Days", len(this_week))
+    c3.metric("High-Threat Incidents", len(high_threat))
+    c4.metric("Active Monitored Sources", active_sources)
+
+
+def render_platform_distribution(df: pd.DataFrame) -> None:
+    if "source_platform" not in df.columns:
+        return
+    fig = px.pie(df, names="source_platform", hole=0.5, title="Incidents by Source Platform")
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_monitored_sources() -> None:
+    with st.expander("📡 Monitored Sources — Public Pages & Figures"):
+        try:
+            resp = requests.get(f"{API_URL}/sources/", headers=auth_headers())
+            sources = resp.json() if resp.status_code == 200 else []
+        except Exception:
+            sources = []
+
+        if sources:
+            st.dataframe(pd.DataFrame(sources)[["platform", "handle", "status", "notes"]], use_container_width=True)
+        else:
+            st.caption("No sources configured yet.")
+
+        with st.form("new_source_form"):
+            col1, col2, col3 = st.columns([2, 3, 2])
+            with col1:
+                platform = st.selectbox("Platform", PLATFORM_OPTIONS[:-1])
+            with col2:
+                handle = st.text_input("Page / Channel / Handle", placeholder="e.g. Cotabato News, Brigada News BARMM")
+            with col3:
+                source_status = st.selectbox("Status", ["Active", "Pending", "Paused"])
+            notes = st.text_input("Notes (optional)", placeholder="e.g. Public news page / public figure / vlogger")
+            if st.form_submit_button("Add Source") and handle:
+                try:
+                    resp = requests.post(
+                        f"{API_URL}/sources/",
+                        json={"platform": platform, "handle": handle, "status": source_status, "notes": notes or None},
+                        headers=auth_headers(),
+                    )
+                    if resp.status_code == 200:
+                        st.success(f"Added '{handle}'.")
+                        st.rerun()
+                    else:
+                        st.error(resp.json().get("detail", "Failed to add source"))
+                except Exception as e:
+                    st.error(f"Connection error: {e}")
 
 
 def render_distribution(df: pd.DataFrame) -> None:
@@ -456,7 +564,12 @@ def render_dashboard() -> None:
 
     st.markdown('<span class="badge-pill">▸ Regional OSINT Platform · WESMINCOM</span>', unsafe_allow_html=True)
     st.title("🛡️ Regional Situational Awareness & OSINT Dashboard")
-    st.markdown('<span class="status-dot"></span>**System Ready**', unsafe_allow_html=True)
+    now_str = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M UTC")
+    st.markdown(
+        f'<div class="ops-banner"><span><span class="status-dot"></span><span class="live">SYSTEM ONLINE</span> · SCAN: HOURLY / ON-DEMAND</span>'
+        f'<span>{now_str}</span></div>',
+        unsafe_allow_html=True,
+    )
     st.markdown("---")
 
     render_alerts()
@@ -465,6 +578,7 @@ def render_dashboard() -> None:
     if st.session_state["role"] in ("Admin", "Analyst"):
         render_ingestion_form()
         render_keyword_manager()
+        render_monitored_sources()
 
     render_semantic_search()
 
@@ -475,14 +589,32 @@ def render_dashboard() -> None:
         if response.status_code == 200:
             records = response.json()
             if records:
-                df = pd.DataFrame(records)
+                df_all = pd.DataFrame(records)
 
+                try:
+                    active_sources = requests.get(f"{API_URL}/sources/", headers=auth_headers()).json()
+                    active_source_count = sum(1 for s in active_sources if s["status"] == "Active")
+                except Exception:
+                    active_source_count = 0
+
+                render_kpis(df_all, active_source_count)
+                st.markdown("---")
+
+                df = df_all
                 if selected_jtf != "All":
                     df = df[df["jtf_assignment"] == selected_jtf]
                 if selected_vector != "All":
                     df = df[df["thematic_vector"] == selected_vector]
 
-                st.dataframe(df[["id", "jtf_assignment", "province", "thematic_vector", "activity_type", "threat_score", "content", "created_at"]], use_container_width=True)
+                display_df = df.copy()
+                if "source_platform" in display_df.columns:
+                    display_df["source_platform"] = display_df["source_platform"].map(
+                        lambda p: f"{PLATFORM_ICON.get(p, '')} {p}"
+                    )
+                    cols = ["id", "source_platform", "jtf_assignment", "province", "thematic_vector", "activity_type", "threat_score", "content", "created_at"]
+                else:
+                    cols = ["id", "jtf_assignment", "province", "thematic_vector", "activity_type", "threat_score", "content", "created_at"]
+                st.dataframe(display_df[cols], use_container_width=True)
 
                 if st.session_state["role"] in ("Admin", "Analyst"):
                     render_edit_delete(df)
@@ -495,6 +627,8 @@ def render_dashboard() -> None:
                     render_distribution(df)
                 with col2:
                     render_leaderboard(df)
+
+                render_platform_distribution(df)
 
                 render_network(df)
                 render_heatmap(df)

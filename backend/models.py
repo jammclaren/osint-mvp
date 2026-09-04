@@ -21,6 +21,7 @@ class ThematicVector(str, enum.Enum):
 class KeywordCategory(str, enum.Enum):
     Threat_Group = "Threat Group"
     Election = "Election"
+    Territorial = "Territorial"
     Region = "Region"
 
 class AlertSeverity(str, enum.Enum):
@@ -57,6 +58,7 @@ class OSINTRecord(Base):
     province = Column(String(100), nullable=False)        # e.g., Sulu, Zamboanga del Sur
     sentiment_score = Column(Float, default=0.0)
     threat_score = Column(Float, default=0.0)
+    source_platform = Column(String(50), nullable=False, default="Field Report")  # X/Twitter, Telegram, Facebook, Field Report
     embedding = Column(Vector(384))  # For semantic search / pgvector
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -77,4 +79,14 @@ class Alert(Base):
     severity = Column(SQLEnum(AlertSeverity), nullable=False)
     message = Column(Text, nullable=False)
     acknowledged = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class MonitoredSource(Base):
+    __tablename__ = "monitored_sources"
+
+    id = Column(Integer, primary_key=True, index=True)
+    platform = Column(String(50), nullable=False)  # X/Twitter, Telegram, Facebook
+    handle = Column(String(200), nullable=False)   # e.g. @username or channel name
+    status = Column(String(20), nullable=False, default="Pending")  # Active | Pending | Paused
+    notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

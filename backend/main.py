@@ -1,3 +1,4 @@
+import enum
 from datetime import datetime
 from typing import Optional
 
@@ -13,15 +14,30 @@ from database import Base, SessionLocal, engine, get_db
 from embeddings import embed, to_pgvector_literal
 from models import (
     ActivityType, Alert, AlertSeverity, Keyword, KeywordCategory,
-    OSINTRecord, RoleEnum, ThematicVector, User,
+    MonitoredSource, OSINTRecord, RoleEnum, ThematicVector, User,
 )
 from scan import evaluate_record, run_scan
+
+
+class SourcePlatform(str, enum.Enum):
+    X_Twitter = "X/Twitter"
+    Telegram = "Telegram"
+    Facebook = "Facebook"
+    Field_Report = "Field Report"
+
 
 with engine.connect() as conn:
     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     conn.commit()
 
 Base.metadata.create_all(bind=engine)
+
+# Patch columns added after initial deploy onto pre-existing tables (create_all only creates missing tables).
+with engine.connect() as conn:
+    conn.execute(text(
+        "ALTER TABLE osint_records ADD COLUMN IF NOT EXISTS source_platform VARCHAR(50) NOT NULL DEFAULT 'Field Report'"
+    ))
+    conn.commit()
 
 app = FastAPI(title="OSINT MVP API")
 
@@ -68,6 +84,7 @@ class OSINTRecordCreate(BaseModel):
     province: str
     sentiment_score: float = 0.0
     threat_score: float = 0.0
+    source_platform: SourcePlatform = SourcePlatform.Field_Report
 
 
 class OSINTRecordOut(BaseModel):
@@ -80,6 +97,7 @@ class OSINTRecordOut(BaseModel):
     province: str
     sentiment_score: float
     threat_score: float
+    source_platform: SourcePlatform
     created_at: datetime
 
     class Config:
@@ -95,6 +113,7 @@ class OSINTRecordUpdate(BaseModel):
     content: Optional[str] = None
     thematic_vector: Optional[ThematicVector] = None
     activity_type: Optional[ActivityType] = None
+    source_platform: Optional[SourcePlatform] = None
     jtf_assignment: Optional[str] = None
     province: Optional[str] = None
     sentiment_score: Optional[float] = None
@@ -110,6 +129,35 @@ class KeywordOut(BaseModel):
     id: int
     term: str
     category: KeywordCategory
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SourceStatus(str, enum.Enum):
+    Active = "Active"
+    Pending = "Pending"
+    Paused = "Paused"
+
+
+class SourceStatusUpdate(BaseModel):
+    status: SourceStatus
+
+
+class MonitoredSourceCreate(BaseModel):
+    platform: SourcePlatform
+    handle: str
+    status: SourceStatus = SourceStatus.Pending
+    notes: Optional[str] = None
+
+
+class MonitoredSourceOut(BaseModel):
+    id: int
+    platform: SourcePlatform
+    handle: str
+    status: SourceStatus
+    notes: Optional[str]
     created_at: datetime
 
     class Config:
@@ -325,3 +373,53 @@ def trigger_scan(
     new_alerts = run_scan(db)
     log_audit(db, current_user.username, "manual_scan", f"new_alerts={new_alerts}")
     return {"new_alerts": new_alerts}
+
+
+@app.get("/sources/", response_model=list[MonitoredSourceOut])
+def list_sources(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return db.query(MonitoredSource).order_by(MonitoredSource.platform, MonitoredSource.handle).all()
+
+
+@app.post("/sources/", response_model=MonitoredSourceOut)
+def create_source(
+    source: MonitoredSourceCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.Admin, RoleEnum.Analyst)),
+):
+    db_source = MonitoredSource(**source.model_dump())
+    db.add(db_source)
+    db.commit()
+    db.refresh(db_source)
+    log_audit(db, current_user.username, "create_source", f"handle={db_source.handle}")
+    return db_source
+
+
+@app.patch("/sources/{source_id}", response_model=MonitoredSourceOut)
+def update_source_status(
+    source_id: int,
+    status_update: SourceStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.Admin, RoleEnum.Analyst)),
+):
+    db_source = db.query(MonitoredSource).filter(MonitoredSource.id == source_id).first()
+    if not db_source:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
+    db_source.status = status_update.status.value
+    db.commit()
+    db.refresh(db_source)
+    return db_source
+
+
+@app.delete("/sources/{source_id}")
+def delete_source(
+    source_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.Admin)),
+):
+    db_source = db.query(MonitoredSource).filter(MonitoredSource.id == source_id).first()
+    if not db_source:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
+    db.delete(db_source)
+    db.commit()
+    log_audit(db, current_user.username, "delete_source", f"handle={db_source.handle}")
+    return {"ok": True}
