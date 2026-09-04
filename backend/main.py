@@ -85,6 +85,7 @@ class OSINTRecordCreate(BaseModel):
     sentiment_score: float = 0.0
     threat_score: float = 0.0
     source_platform: SourcePlatform = SourcePlatform.Field_Report
+    created_at: Optional[datetime] = None  # actual post/event time, if different from ingestion time
 
 
 class OSINTRecordOut(BaseModel):
@@ -253,7 +254,11 @@ def create_record(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(RoleEnum.Admin, RoleEnum.Analyst)),
 ):
-    db_record = OSINTRecord(**record.model_dump())
+    data = record.model_dump()
+    custom_created_at = data.pop("created_at", None)
+    db_record = OSINTRecord(**data)
+    if custom_created_at is not None:
+        db_record.created_at = custom_created_at
     db_record.embedding = embed(record.content)
     db.add(db_record)
     db.commit()
