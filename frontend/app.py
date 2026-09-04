@@ -135,7 +135,48 @@ def auth_headers() -> dict:
     return {"Authorization": f"Bearer {st.session_state['token']}"}
 
 
+def render_running_strawberries() -> None:
+    st.markdown("""
+    <style>
+    .strawberry-runner {
+        position: fixed; width: 30px; height: 30px; z-index: 9999; pointer-events: none;
+        animation: run-loop 10s linear infinite;
+    }
+    .strawberry-runner svg { width: 100% !important; height: 100% !important; }
+    .strawberry-runner .bounce {
+        display: block; width: 100%; height: 100%;
+        animation: run-bounce 0.35s ease-in-out infinite alternate;
+    }
+    .strawberry-runner.chaser { animation-delay: -1.2s; }
+    .strawberry-runner.chaser .bounce { animation-delay: -0.15s; }
+
+    @keyframes run-loop {
+        0%   { top: 4vh; left: 3vw; }
+        24%  { top: 4vh; left: 92vw; }
+        25%  { top: 4vh; left: 92vw; }
+        49%  { top: 88vh; left: 92vw; }
+        50%  { top: 88vh; left: 92vw; }
+        74%  { top: 88vh; left: 3vw; }
+        75%  { top: 88vh; left: 3vw; }
+        99%  { top: 4vh; left: 3vw; }
+        100% { top: 4vh; left: 3vw; }
+    }
+    @keyframes run-bounce {
+        0%   { transform: translateY(0) rotate(-8deg) scaleX(1); }
+        100% { transform: translateY(-6px) rotate(8deg) scaleX(0.95); }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown(
+        f'<div class="strawberry-runner leader"><span class="bounce">{STRAWBERRY_ICON}</span></div>'
+        f'<div class="strawberry-runner chaser"><span class="bounce">{STRAWBERRY_ICON}</span></div>',
+        unsafe_allow_html=True,
+    )
+
+
 def render_login() -> None:
+    render_running_strawberries()
     left, center, right = st.columns([1, 1.3, 1])
     with center:
         st.markdown(f'<div class="sidebar-icon">{STRAWBERRY_ICON}</div>', unsafe_allow_html=True)
