@@ -8,6 +8,23 @@ import plotly.graph_objects as go
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
+STRAWBERRY_ICON = """
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="44" height="44">
+  <path d="M50,25 C65,25 80,35 80,60 C80,80 55,95 50,95 C45,95 20,80 20,60 C20,35 35,25 50,25 Z" fill="#d9a441" />
+  <path d="M50,28 C53,20 62,12 72,18 C65,22 60,28 58,32 C65,30 75,30 82,36 C72,38 62,36 55,34 C56,42 54,50 50,55 C46,50 44,42 45,34 C38,36 28,38 18,36 C25,30 35,30 42,32 C40,28 35,22 28,18 C38,12 47,20 50,28 Z" fill="#d9a441" />
+  <g fill="#FFFFFF">
+    <circle cx="42" cy="45" r="2" />
+    <circle cx="58" cy="45" r="2" />
+    <circle cx="34" cy="58" r="2" />
+    <circle cx="50" cy="58" r="2" />
+    <circle cx="66" cy="58" r="2" />
+    <circle cx="42" cy="71" r="2" />
+    <circle cx="58" cy="71" r="2" />
+    <circle cx="50" cy="83" r="2" />
+  </g>
+</svg>
+"""
+
 st.set_page_config(
     page_title="OSINT Situational Awareness Dashboard",
     page_icon="🛡️",
@@ -15,12 +32,72 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+st.markdown("""
+<style>
+:root {
+    --bg: #0a0a0a;
+    --panel: #141414;
+    --panel-border: #2a2a2a;
+    --gold: #d9a441;
+    --gold-hover: #e8b755;
+    --gold-dim: rgba(217, 164, 65, 0.12);
+    --text: #e8e8e8;
+    --text-muted: #9a9a9a;
+    --green: #4ade80;
+}
+
+.stApp, [data-testid="stAppViewContainer"] { background-color: var(--bg); color: var(--text); }
+[data-testid="stHeader"] { background-color: var(--bg); }
+[data-testid="stSidebar"] { background-color: #0d0d0d; border-right: 1px solid var(--panel-border); }
+
+h1, h2, h3, h4 { color: var(--text) !important; letter-spacing: 0.02em; }
+
+.badge-pill {
+    display: inline-block; padding: 4px 12px; border: 1px solid var(--gold);
+    border-radius: 999px; color: var(--gold); font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 12px;
+}
+.status-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background-color: var(--green); margin-right: 6px;
+}
+.sidebar-icon { text-align: center; margin-bottom: 4px; }
+.sidebar-icon svg {
+    background-color: #f4f1e8; border: 2px solid var(--gold); border-radius: 50%;
+    padding: 6px; box-shadow: 0 0 12px var(--gold-dim);
+}
+
+.stButton > button {
+    background-color: transparent; color: var(--gold); border: 1px solid var(--gold);
+    border-radius: 6px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.8rem;
+}
+.stButton > button:hover { background-color: var(--gold-dim); border-color: var(--gold-hover); color: var(--gold-hover); }
+
+[data-testid="stFormSubmitButton"] > button {
+    background-color: var(--gold); color: #0a0a0a; border: none;
+    border-radius: 6px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+}
+[data-testid="stFormSubmitButton"] > button:hover { background-color: var(--gold-hover); color: #0a0a0a; }
+
+[data-testid="stExpander"] { background-color: var(--panel); border: 1px solid var(--panel-border); border-radius: 10px; }
+
+input, textarea { background-color: #1a1a1a !important; border-color: var(--panel-border) !important; color: var(--text) !important; }
+[data-baseweb="select"] > div { background-color: #1a1a1a !important; border-color: var(--panel-border) !important; }
+
+[data-testid="stDataFrame"] { border: 1px solid var(--panel-border); border-radius: 8px; }
+.stAlert { border-radius: 8px; }
+[data-testid="stMetricValue"] { color: var(--gold) !important; }
+</style>
+""", unsafe_allow_html=True)
+
 
 def auth_headers() -> dict:
     return {"Authorization": f"Bearer {st.session_state['token']}"}
 
 
 def render_login() -> None:
+    st.markdown(f'<div class="sidebar-icon" style="text-align:left;">{STRAWBERRY_ICON}</div>', unsafe_allow_html=True)
+    st.markdown('<span class="badge-pill">▸ Regional OSINT Platform · WESMINCOM</span>', unsafe_allow_html=True)
     st.title("🛡️ OSINT Dashboard — Sign In")
     login_tab, register_tab = st.tabs(["Login", "Register"])
 
@@ -95,6 +172,63 @@ def render_ingestion_form() -> None:
                     st.error(f"Connection error: {e}")
 
 
+def render_edit_delete(df: pd.DataFrame) -> None:
+    with st.expander("✏️ Edit / Delete Record"):
+        record_id = st.selectbox("Record ID", df["id"].tolist(), key="edit_record_id")
+        record = df[df["id"] == record_id].iloc[0]
+
+        with st.form("edit_record_form"):
+            content = st.text_area("Content", value=record["content"])
+            col1, col2 = st.columns(2)
+            jtf_options = ["JTF ZAMPELAN", "JTF ORION", "JTF Central", "JTF Poseidon"]
+            vector_options = ["Electoral Security", "Securitization & Threat Groups", "Territorial & Maritime Security"]
+            activity_options = ["Non-Violent", "Violent"]
+            with col1:
+                jtf_assignment = st.selectbox("Joint Task Force", jtf_options, index=jtf_options.index(record["jtf_assignment"]) if record["jtf_assignment"] in jtf_options else 0)
+                thematic_vector = st.selectbox("Thematic Vector", vector_options, index=vector_options.index(record["thematic_vector"]) if record["thematic_vector"] in vector_options else 0)
+                province = st.text_input("Province", value=record["province"])
+            with col2:
+                activity_type = st.selectbox("Activity Type", activity_options, index=activity_options.index(record["activity_type"]) if record["activity_type"] in activity_options else 0)
+                threat_score = st.slider("Threat Score", 0.0, 10.0, float(record["threat_score"]), 0.1)
+                sentiment_score = st.slider("Sentiment Score", -1.0, 1.0, float(record["sentiment_score"]), 0.1)
+
+            col_save, col_delete = st.columns(2)
+            with col_save:
+                save = st.form_submit_button("Save Changes")
+            with col_delete:
+                delete = st.form_submit_button("Delete Record", type="primary")
+
+            if save:
+                payload = {
+                    "content": content, "jtf_assignment": jtf_assignment, "thematic_vector": thematic_vector,
+                    "province": province, "activity_type": activity_type,
+                    "threat_score": threat_score, "sentiment_score": sentiment_score,
+                }
+                try:
+                    resp = requests.patch(f"{API_URL}/records/{record_id}", json=payload, headers=auth_headers())
+                    if resp.status_code == 200:
+                        st.success("Record updated.")
+                        st.rerun()
+                    else:
+                        st.error(resp.json().get("detail", "Update failed"))
+                except Exception as e:
+                    st.error(f"Connection error: {e}")
+
+            if delete:
+                if st.session_state["role"] != "Admin":
+                    st.error("Only Admins can delete records.")
+                else:
+                    try:
+                        resp = requests.delete(f"{API_URL}/records/{record_id}", headers=auth_headers())
+                        if resp.status_code == 200:
+                            st.success("Record deleted.")
+                            st.rerun()
+                        else:
+                            st.error(resp.json().get("detail", "Delete failed"))
+                    except Exception as e:
+                        st.error(f"Connection error: {e}")
+
+
 def render_timeline(df: pd.DataFrame) -> None:
     timeline = df.copy()
     timeline["date"] = pd.to_datetime(timeline["created_at"]).dt.date
@@ -151,6 +285,140 @@ def render_heatmap(df: pd.DataFrame) -> None:
     st.plotly_chart(fig, use_container_width=True)
 
 
+PROVINCE_CENTROIDS = {
+    "Sulu": (6.0474, 121.0000),
+    "Basilan": (6.4297, 121.9689),
+    "Tawi-Tawi": (5.1339, 119.9333),
+    "Zamboanga del Sur": (7.8383, 123.4360),
+    "Zamboanga del Norte": (8.1527, 123.2577),
+    "Zamboanga Sibugay": (7.5222, 122.8198),
+    "Lanao del Sur": (7.8232, 124.4357),
+    "Lanao del Norte": (8.1156, 123.9315),
+    "Maguindanao": (6.9423, 124.4198),
+}
+
+SEVERITY_COLOR = {"High": "🔴", "Medium": "🟠"}
+
+
+def render_alerts() -> None:
+    st.subheader("🚨 Alerts")
+    col1, col2 = st.columns([4, 1])
+    with col2:
+        if st.session_state["role"] in ("Admin", "Analyst") and st.button("Run Scan Now"):
+            try:
+                resp = requests.post(f"{API_URL}/scan/run", headers=auth_headers())
+                if resp.status_code == 200:
+                    st.success(f"Scan complete — {resp.json()['new_alerts']} new alert(s).")
+                    st.rerun()
+                else:
+                    st.error(resp.json().get("detail", "Scan failed"))
+            except Exception as e:
+                st.error(f"Connection error: {e}")
+
+    try:
+        resp = requests.get(f"{API_URL}/alerts/", params={"unacknowledged_only": True}, headers=auth_headers())
+        if resp.status_code != 200:
+            st.error("Failed to load alerts.")
+            return
+        alerts = resp.json()
+        if not alerts:
+            st.caption("No active alerts.")
+            return
+        for alert in alerts:
+            icon = SEVERITY_COLOR.get(alert["severity"], "⚪")
+            c1, c2 = st.columns([9, 1])
+            with c1:
+                st.markdown(f"{icon} **{alert['rule_type']}** — {alert['message']}")
+            with c2:
+                if st.session_state["role"] in ("Admin", "Analyst") and st.button("Ack", key=f"ack_{alert['id']}"):
+                    requests.post(f"{API_URL}/alerts/{alert['id']}/acknowledge", headers=auth_headers())
+                    st.rerun()
+    except Exception as e:
+        st.error(f"Connection error: {e}")
+
+
+def render_keyword_manager() -> None:
+    with st.expander("🎯 Target Keyword Dictionary"):
+        try:
+            resp = requests.get(f"{API_URL}/keywords/", headers=auth_headers())
+            keywords = resp.json() if resp.status_code == 200 else []
+        except Exception:
+            keywords = []
+
+        if keywords:
+            st.dataframe(pd.DataFrame(keywords)[["term", "category", "created_at"]], use_container_width=True)
+        else:
+            st.caption("No keywords tracked yet.")
+
+        with st.form("new_keyword_form"):
+            col1, col2, col3 = st.columns([3, 2, 1])
+            with col1:
+                term = st.text_input("Term (e.g. CPP-NPA, Abu Sayyaf, COMELEC)")
+            with col2:
+                category = st.selectbox("Category", ["Threat Group", "Election", "Region"])
+            with col3:
+                st.write("")
+                submitted = st.form_submit_button("Add")
+            if submitted and term:
+                try:
+                    resp = requests.post(f"{API_URL}/keywords/", json={"term": term, "category": category}, headers=auth_headers())
+                    if resp.status_code == 200:
+                        st.success(f"Added '{term}'.")
+                        st.rerun()
+                    else:
+                        st.error(resp.json().get("detail", "Failed to add keyword"))
+                except Exception as e:
+                    st.error(f"Connection error: {e}")
+
+
+def render_trend_spikes(df: pd.DataFrame) -> None:
+    trend = df.copy()
+    trend["date"] = pd.to_datetime(trend["created_at"]).dt.date
+    daily = trend.groupby(["date", "thematic_vector"]).size().reset_index(name="count")
+
+    daily["mean"] = daily.groupby("thematic_vector")["count"].transform("mean")
+    daily["std"] = daily.groupby("thematic_vector")["count"].transform("std").fillna(0)
+    daily["is_spike"] = daily["count"] > (daily["mean"] + daily["std"])
+
+    fig = px.bar(
+        daily, x="date", y="count", color="thematic_vector",
+        pattern_shape="is_spike", pattern_shape_map={True: "x", False: ""},
+        title="Trend Analysis — Volume by Thematic Vector (✕ pattern = spike day)",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    spikes = daily[daily["is_spike"]]
+    if not spikes.empty:
+        st.warning(f"{len(spikes)} spike day(s) detected — volume above the vector's rolling mean + 1 std dev.")
+        st.dataframe(spikes[["date", "thematic_vector", "count"]], use_container_width=True)
+
+
+def render_geo_map(df: pd.DataFrame) -> None:
+    geo = df.copy()
+    geo["lat"] = geo["province"].map(lambda p: PROVINCE_CENTROIDS.get(p, (None, None))[0])
+    geo["lon"] = geo["province"].map(lambda p: PROVINCE_CENTROIDS.get(p, (None, None))[1])
+    geo = geo.dropna(subset=["lat", "lon"])
+
+    if geo.empty:
+        st.caption("No records with a mappable province yet.")
+        return
+
+    agg = geo.groupby(["province", "lat", "lon"]).agg(
+        record_count=("id", "count"), avg_threat=("threat_score", "mean")
+    ).reset_index()
+
+    fig = px.scatter_geo(
+        agg, lat="lat", lon="lon", size="record_count", color="avg_threat",
+        hover_name="province", color_continuous_scale="OrRd",
+        title="Geospatial Distribution — OSINT Data Points by Province",
+    )
+    fig.update_geos(
+        lataxis_range=[4, 10], lonaxis_range=[118, 126],
+        showland=True, landcolor="rgb(30,30,30)", showcountries=True,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+
 def render_semantic_search() -> None:
     with st.expander("🔎 Semantic Search"):
         query = st.text_input("Search by meaning (not just keywords)", key="semantic_query")
@@ -175,6 +443,7 @@ def render_semantic_search() -> None:
 
 
 def render_dashboard() -> None:
+    st.sidebar.markdown(f'<div class="sidebar-icon">{STRAWBERRY_ICON}</div>', unsafe_allow_html=True)
     st.sidebar.header("Operational Parameters")
     st.sidebar.markdown(f"Signed in as **{st.session_state['username']}** ({st.session_state['role']})")
     if st.sidebar.button("Log Out"):
@@ -185,11 +454,17 @@ def render_dashboard() -> None:
     selected_jtf = st.sidebar.selectbox("Joint Task Force", ["All", "JTF ZAMPELAN", "JTF ORION", "JTF Central", "JTF Poseidon"])
     selected_vector = st.sidebar.selectbox("Thematic Vector", ["All", "Electoral Security", "Securitization & Threat Groups", "Territorial & Maritime Security"])
 
+    st.markdown('<span class="badge-pill">▸ Regional OSINT Platform · WESMINCOM</span>', unsafe_allow_html=True)
     st.title("🛡️ Regional Situational Awareness & OSINT Dashboard")
+    st.markdown('<span class="status-dot"></span>**System Ready**', unsafe_allow_html=True)
+    st.markdown("---")
+
+    render_alerts()
     st.markdown("---")
 
     if st.session_state["role"] in ("Admin", "Analyst"):
         render_ingestion_form()
+        render_keyword_manager()
 
     render_semantic_search()
 
@@ -209,6 +484,9 @@ def render_dashboard() -> None:
 
                 st.dataframe(df[["id", "jtf_assignment", "province", "thematic_vector", "activity_type", "threat_score", "content", "created_at"]], use_container_width=True)
 
+                if st.session_state["role"] in ("Admin", "Analyst"):
+                    render_edit_delete(df)
+
                 st.markdown("---")
                 render_timeline(df)
 
@@ -220,6 +498,12 @@ def render_dashboard() -> None:
 
                 render_network(df)
                 render_heatmap(df)
+
+                st.markdown("---")
+                render_trend_spikes(df)
+
+                st.markdown("---")
+                render_geo_map(df)
             else:
                 st.info("No OSINT records found in local database. Use the form above to log one.")
         elif response.status_code == 401:

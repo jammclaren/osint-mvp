@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
@@ -8,9 +9,13 @@ from sqlalchemy import literal_column, text
 from sqlalchemy.orm import Session
 
 from auth import create_access_token, get_current_user, hash_password, log_audit, require_role, verify_password
-from database import Base, engine, get_db
+from database import Base, SessionLocal, engine, get_db
 from embeddings import embed, to_pgvector_literal
-from models import ActivityType, OSINTRecord, RoleEnum, ThematicVector, User
+from models import (
+    ActivityType, Alert, AlertSeverity, Keyword, KeywordCategory,
+    OSINTRecord, RoleEnum, ThematicVector, User,
+)
+from scan import evaluate_record, run_scan
 
 with engine.connect() as conn:
     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
@@ -19,6 +24,19 @@ with engine.connect() as conn:
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="OSINT MVP API")
+
+
+def _scheduled_scan():
+    db = SessionLocal()
+    try:
+        run_scan(db)
+    finally:
+        db.close()
+
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(_scheduled_scan, "interval", hours=1, id="hourly_scan")
+scheduler.start()
 
 
 class UserCreate(BaseModel):
@@ -70,6 +88,45 @@ class OSINTRecordOut(BaseModel):
 
 class OSINTRecordSearchOut(OSINTRecordOut):
     similarity: float = 0.0
+
+
+class OSINTRecordUpdate(BaseModel):
+    source_url: Optional[str] = None
+    content: Optional[str] = None
+    thematic_vector: Optional[ThematicVector] = None
+    activity_type: Optional[ActivityType] = None
+    jtf_assignment: Optional[str] = None
+    province: Optional[str] = None
+    sentiment_score: Optional[float] = None
+    threat_score: Optional[float] = None
+
+
+class KeywordCreate(BaseModel):
+    term: str
+    category: KeywordCategory
+
+
+class KeywordOut(BaseModel):
+    id: int
+    term: str
+    category: KeywordCategory
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AlertOut(BaseModel):
+    id: int
+    record_id: Optional[int]
+    rule_type: str
+    severity: AlertSeverity
+    message: str
+    acknowledged: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 @app.get("/health")
@@ -154,4 +211,117 @@ def create_record(
     db.commit()
     db.refresh(db_record)
     log_audit(db, current_user.username, "create_record", f"record_id={db_record.id}")
+    evaluate_record(db, db_record)
     return db_record
+
+
+@app.patch("/records/{record_id}", response_model=OSINTRecordOut)
+def update_record(
+    record_id: int,
+    update: OSINTRecordUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.Admin, RoleEnum.Analyst)),
+):
+    db_record = db.query(OSINTRecord).filter(OSINTRecord.id == record_id).first()
+    if not db_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
+
+    changes = update.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(db_record, field, value)
+    if "content" in changes:
+        db_record.embedding = embed(db_record.content)
+
+    db.commit()
+    db.refresh(db_record)
+    log_audit(db, current_user.username, "update_record", f"record_id={record_id} fields={list(changes.keys())}")
+    return db_record
+
+
+@app.delete("/records/{record_id}")
+def delete_record(
+    record_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.Admin)),
+):
+    db_record = db.query(OSINTRecord).filter(OSINTRecord.id == record_id).first()
+    if not db_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
+    db.query(Alert).filter(Alert.record_id == record_id).delete()
+    db.delete(db_record)
+    db.commit()
+    log_audit(db, current_user.username, "delete_record", f"record_id={record_id}")
+    return {"ok": True}
+
+
+@app.get("/keywords/", response_model=list[KeywordOut])
+def list_keywords(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return db.query(Keyword).order_by(Keyword.term).all()
+
+
+@app.post("/keywords/", response_model=KeywordOut)
+def create_keyword(
+    keyword: KeywordCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.Admin, RoleEnum.Analyst)),
+):
+    if db.query(Keyword).filter(Keyword.term == keyword.term).first():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Keyword already exists")
+    db_keyword = Keyword(**keyword.model_dump())
+    db.add(db_keyword)
+    db.commit()
+    db.refresh(db_keyword)
+    log_audit(db, current_user.username, "create_keyword", f"term={db_keyword.term}")
+    return db_keyword
+
+
+@app.delete("/keywords/{keyword_id}")
+def delete_keyword(
+    keyword_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.Admin)),
+):
+    db_keyword = db.query(Keyword).filter(Keyword.id == keyword_id).first()
+    if not db_keyword:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Keyword not found")
+    db.delete(db_keyword)
+    db.commit()
+    log_audit(db, current_user.username, "delete_keyword", f"term={db_keyword.term}")
+    return {"ok": True}
+
+
+@app.get("/alerts/", response_model=list[AlertOut])
+def list_alerts(
+    unacknowledged_only: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    query = db.query(Alert)
+    if unacknowledged_only:
+        query = query.filter(Alert.acknowledged.is_(False))
+    return query.order_by(Alert.created_at.desc()).all()
+
+
+@app.post("/alerts/{alert_id}/acknowledge", response_model=AlertOut)
+def acknowledge_alert(
+    alert_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.Admin, RoleEnum.Analyst)),
+):
+    db_alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not db_alert:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    db_alert.acknowledged = True
+    db.commit()
+    db.refresh(db_alert)
+    return db_alert
+
+
+@app.post("/scan/run")
+def trigger_scan(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.Admin, RoleEnum.Analyst)),
+):
+    new_alerts = run_scan(db)
+    log_audit(db, current_user.username, "manual_scan", f"new_alerts={new_alerts}")
+    return {"new_alerts": new_alerts}
