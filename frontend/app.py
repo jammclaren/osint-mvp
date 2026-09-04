@@ -23,6 +23,40 @@ STRAWBERRY_ICON = """
 </svg>
 """
 
+WALKING_STRAWBERRY_ICON = """
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 140" width="40" height="56">
+  <g class="leg leg-left">
+    <line x1="40" y1="95" x2="33" y2="120" stroke="#d9a441" stroke-width="7" stroke-linecap="round" />
+    <ellipse cx="30" cy="123" rx="8" ry="4" fill="#d9a441" />
+  </g>
+  <g class="leg leg-right">
+    <line x1="60" y1="95" x2="67" y2="120" stroke="#d9a441" stroke-width="7" stroke-linecap="round" />
+    <ellipse cx="70" cy="123" rx="8" ry="4" fill="#d9a441" />
+  </g>
+  <g class="arm arm-left">
+    <line x1="24" y1="58" x2="8" y2="72" stroke="#d9a441" stroke-width="6" stroke-linecap="round" />
+    <circle cx="6" cy="75" r="6" fill="#d9a441" />
+  </g>
+  <g class="arm arm-right">
+    <line x1="76" y1="58" x2="92" y2="72" stroke="#d9a441" stroke-width="6" stroke-linecap="round" />
+    <circle cx="94" cy="75" r="6" fill="#d9a441" />
+  </g>
+  <path d="M50,25 C65,25 80,35 80,60 C80,80 55,95 50,95 C45,95 20,80 20,60 C20,35 35,25 50,25 Z" fill="#d9a441" />
+  <path d="M50,28 C53,20 62,12 72,18 C65,22 60,28 58,32 C65,30 75,30 82,36 C72,38 62,36 55,34 C56,42 54,50 50,55 C46,50 44,42 45,34 C38,36 28,38 18,36 C25,30 35,30 42,32 C40,28 35,22 28,18 C38,12 47,20 50,28 Z" fill="#d9a441" />
+  <g fill="#FFFFFF">
+    <circle cx="42" cy="45" r="2" />
+    <circle cx="58" cy="45" r="2" />
+    <circle cx="34" cy="58" r="2" />
+    <circle cx="66" cy="58" r="2" />
+    <circle cx="42" cy="71" r="2" />
+    <circle cx="58" cy="71" r="2" />
+  </g>
+  <circle cx="42" cy="60" r="3" fill="#1a1a12" />
+  <circle cx="58" cy="60" r="3" fill="#1a1a12" />
+  <path d="M44,70 Q50,76 56,70" stroke="#1a1a12" stroke-width="2.5" fill="none" stroke-linecap="round" />
+</svg>
+"""
+
 st.set_page_config(
     page_title="OSINT Situational Awareness Dashboard",
     page_icon="🛡️",
@@ -137,39 +171,38 @@ def auth_headers() -> dict:
 def render_running_strawberries() -> None:
     st.markdown("""
     <style>
-    .strawberry-runner {
-        position: fixed; width: 30px; height: 30px; z-index: 9999; pointer-events: none;
-        animation: run-loop 10s linear infinite;
+    .strawberry-walker {
+        position: fixed; width: 34px; height: 48px; z-index: 9999; pointer-events: none;
+        animation: wander-loop 48s ease-in-out infinite;
     }
-    .strawberry-runner svg { width: 100% !important; height: 100% !important; }
-    .strawberry-runner .bounce {
-        display: block; width: 100%; height: 100%;
-        animation: run-bounce 0.35s ease-in-out infinite alternate;
-    }
-    .strawberry-runner.chaser { animation-delay: -1.2s; }
-    .strawberry-runner.chaser .bounce { animation-delay: -0.15s; }
+    .strawberry-walker svg { width: 100% !important; height: 100% !important; overflow: visible; }
+    .strawberry-walker.mate { animation-delay: -1.8s; margin-left: 26px; margin-top: 4px; }
 
-    @keyframes run-loop {
-        0%   { top: 4vh; left: 3vw; }
-        24%  { top: 4vh; left: 92vw; }
-        25%  { top: 4vh; left: 92vw; }
-        49%  { top: 88vh; left: 92vw; }
-        50%  { top: 88vh; left: 92vw; }
-        74%  { top: 88vh; left: 3vw; }
-        75%  { top: 88vh; left: 3vw; }
-        99%  { top: 4vh; left: 3vw; }
-        100% { top: 4vh; left: 3vw; }
-    }
-    @keyframes run-bounce {
-        0%   { transform: translateY(0) rotate(-8deg) scaleX(1); }
-        100% { transform: translateY(-6px) rotate(8deg) scaleX(0.95); }
+    .strawberry-walker .leg, .strawberry-walker .arm { transform-box: fill-box; transform-origin: top center; }
+    .leg-left  { animation: swing-a 0.9s ease-in-out infinite; }
+    .leg-right { animation: swing-b 0.9s ease-in-out infinite; }
+    .arm-left  { animation: swing-b 0.9s ease-in-out infinite; }
+    .arm-right { animation: swing-a 0.9s ease-in-out infinite; }
+
+    @keyframes swing-a { 0%, 100% { transform: rotate(18deg); } 50% { transform: rotate(-18deg); } }
+    @keyframes swing-b { 0%, 100% { transform: rotate(-18deg); } 50% { transform: rotate(18deg); } }
+
+    @keyframes wander-loop {
+        0%   { top: 6vh;  left: 4vw;  }
+        14%  { top: 10vh; left: 30vw; }
+        28%  { top: 6vh;  left: 60vw; }
+        42%  { top: 20vh; left: 88vw; }
+        56%  { top: 45vh; left: 80vw; }
+        70%  { top: 60vh; left: 50vw; }
+        84%  { top: 40vh; left: 15vw; }
+        100% { top: 6vh;  left: 4vw;  }
     }
     </style>
     """, unsafe_allow_html=True)
 
     st.markdown(
-        f'<div class="strawberry-runner leader"><span class="bounce">{STRAWBERRY_ICON}</span></div>'
-        f'<div class="strawberry-runner chaser"><span class="bounce">{STRAWBERRY_ICON}</span></div>',
+        f'<div class="strawberry-walker leader">{WALKING_STRAWBERRY_ICON}</div>'
+        f'<div class="strawberry-walker mate">{WALKING_STRAWBERRY_ICON}</div>',
         unsafe_allow_html=True,
     )
 
@@ -228,6 +261,8 @@ SMI_CATEGORIES = {
     "West Philippine Sea & Sabah": ["west philippine sea", "wps", "sabah", "south china sea"],
 }
 
+PLATFORM_ICON = {"X/Twitter": "🐦", "Telegram": "✈️", "Facebook": "📘", "Field Report": "📋"}
+
 
 def classify_smi_category(content: str) -> str:
     lower = str(content).lower()
@@ -277,6 +312,36 @@ def render_category_breakdown(df: pd.DataFrame) -> pd.DataFrame:
     return cat_df
 
 
+def render_topic_summary(cat_df: pd.DataFrame) -> None:
+    st.subheader("📰 Topic Summary — Scanned & Gathered")
+
+    for category in list(SMI_CATEGORIES.keys()) + ["Other / Uncategorized"]:
+        sub = cat_df[cat_df["smi_category"] == category]
+        if sub.empty:
+            continue
+
+        violent = len(sub[sub["activity_type"] == "Violent"])
+        top_province = sub["province"].value_counts().index[0] if not sub["province"].value_counts().empty else "N/A"
+        latest = pd.to_datetime(sub["created_at"]).max()
+        latest_str = latest.strftime("%Y-%m-%d %H:%M UTC") if pd.notna(latest) else "N/A"
+
+        with st.expander(f"{category} — {len(sub)} post(s)"):
+            st.markdown(
+                f"{len(sub)} post(s) gathered from Monitored Sources, **{violent}** flagged violent. "
+                f"Most active area: **{top_province}**. Latest activity: {latest_str}."
+            )
+            st.markdown("**Monitored Posts:**")
+            for _, row in sub.sort_values("created_at", ascending=False).head(10).iterrows():
+                content = str(row["content"])
+                snippet = content[:90] + "…" if len(content) > 90 else content
+                tag = f"{PLATFORM_ICON.get(row.get('source_platform'), '📋')} {row.get('source_platform', 'Field Report')}"
+                source_url = row.get("source_url")
+                if pd.notna(source_url) and source_url:
+                    st.markdown(f"- [{snippet}]({source_url}) — {tag} · {row['province']} · {row['activity_type']}")
+                else:
+                    st.markdown(f"- {snippet} — {tag} · {row['province']} · {row['activity_type']} *(no source link)*")
+
+
 def render_timeline(df: pd.DataFrame) -> None:
     timeline = df.copy()
     timeline["date"] = pd.to_datetime(timeline["created_at"]).dt.date
@@ -292,27 +357,39 @@ def render_platform_distribution(df: pd.DataFrame) -> None:
     st.plotly_chart(fig, use_container_width=True)
 
 
+PIN_OFFSETS = [(0, 0), (0.13, 0.09), (-0.13, 0.09), (0.13, -0.09), (-0.13, -0.09), (0.22, 0), (-0.22, 0), (0, 0.22), (0, -0.22)]
+PIN_COLOR = {"Violent": "#e34848", "Non-Violent": "#e8c93a"}
+
+
 def render_geo_priority(df: pd.DataFrame) -> None:
     geo = df.copy()
     geo["lat"] = geo["province"].map(lambda p: PROVINCE_CENTROIDS.get(p, (None, None))[0])
     geo["lon"] = geo["province"].map(lambda p: PROVINCE_CENTROIDS.get(p, (None, None))[1])
-    geo = geo.dropna(subset=["lat", "lon"])
+    geo = geo.dropna(subset=["lat", "lon"]).reset_index(drop=True)
     if geo.empty:
+        st.caption("No mappable posts yet.")
         return
 
-    agg = geo.groupby(["province", "lat", "lon"]).agg(
-        post_count=("id", "count"), avg_threat=("threat_score", "mean")
-    ).reset_index()
+    geo["_rank"] = geo.groupby("province").cumcount() % len(PIN_OFFSETS)
+    geo["lat"] = geo["lat"] + geo["_rank"].map(lambda i: PIN_OFFSETS[i][0])
+    geo["lon"] = geo["lon"] + geo["_rank"].map(lambda i: PIN_OFFSETS[i][1])
 
     fig = px.scatter_geo(
-        agg, lat="lat", lon="lon", size="post_count", color="avg_threat",
-        hover_name="province", color_continuous_scale="OrRd",
-        title="Geographic Priority — Where to Focus Response",
+        geo, lat="lat", lon="lon", color="activity_type",
+        color_discrete_map=PIN_COLOR,
+        hover_name="province", hover_data={"lat": False, "lon": False, "_rank": False, "content": True},
+        title="Monitored Post Locations — Red = Violent, Yellow = Non-Violent",
     )
+    fig.update_traces(marker=dict(size=11, line=dict(width=1, color="#0a0a0a")))
     fig.update_geos(
         lataxis_range=[4, 10], lonaxis_range=[118, 126],
-        showland=True, landcolor="rgb(30,30,30)", showcountries=True,
+        showland=True, landcolor="rgb(70,70,70)",
+        showocean=True, oceancolor="rgb(18,18,18)",
+        showcountries=True, countrycolor="rgb(110,110,110)",
+        showcoastlines=True, coastlinecolor="rgb(100,100,100)",
+        showlakes=False, bgcolor="rgba(0,0,0,0)",
     )
+    fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", legend_title_text="Activity Type")
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -547,7 +624,9 @@ def render_dashboard() -> None:
                 st.caption("All entries extracted from Monitored Sources (public pages, officials, vloggers).")
                 render_kpis(df, active_source_count)
                 st.markdown("---")
-                render_category_breakdown(df)
+                cat_df = render_category_breakdown(df)
+                st.markdown("---")
+                render_topic_summary(cat_df)
                 st.markdown("---")
 
                 col1, col2 = st.columns(2)
